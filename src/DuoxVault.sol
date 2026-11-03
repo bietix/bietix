@@ -145,8 +145,11 @@ contract DuoxVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reentr
         (uint256 feeBtc, uint256 feeEth) = _fees(btcIn, ethIn);
 
         // Efectos antes de las llamadas externas. Si alguna transferencia falla, todo se revierte.
-        _mint(receiver, shares);
+        // El evento se emite antes de cualquier llamada externa y la función es nonReentrant;
+        // el aviso del linter es un falso positivo.
+        // forge-lint: disable-next-line(reentrancy-events)
         emit Minted(msg.sender, receiver, shares, btcIn, ethIn, feeBtc, feeEth);
+        _mint(receiver, shares);
 
         _pullExact(ASSET_BTC, msg.sender, btcIn);
         _pullExact(ASSET_ETH, msg.sender, ethIn);
@@ -165,8 +168,9 @@ contract DuoxVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reentr
         if (receiver == address(0)) revert ZeroAddress();
 
         (btcOut, ethOut) = assetsForShares(shares, Math.Rounding.Floor);
-        _burn(msg.sender, shares);
+        // forge-lint: disable-next-line(reentrancy-events)
         emit Redeemed(msg.sender, receiver, shares, btcOut, ethOut);
+        _burn(msg.sender, shares);
 
         if (btcOut > 0) ASSET_BTC.safeTransfer(receiver, btcOut);
         if (ethOut > 0) ASSET_ETH.safeTransfer(receiver, ethOut);

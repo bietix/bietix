@@ -123,8 +123,11 @@ contract OracleGuard is AccessControlDefaultAdminRules {
 
     /// @notice Revierte si el sequencer de Arbitrum está caído, sin inicializar o en período de gracia.
     function checkSequencer() public view {
-        // slither-disable-next-line unused-return
+        // Solo se usan answer y startedAt (así lo indica la documentación de Chainlink para este feed).
+        // slither-disable-start unused-return
+        // forge-lint: disable-next-line(unused-return)
         (, int256 answer, uint256 startedAt,,) = sequencerFeed.latestRoundData();
+        // slither-disable-end unused-return
         if (answer != 0) revert SequencerDown();
         if (startedAt == 0) revert SequencerNotInitialized();
         if (block.timestamp - startedAt <= gracePeriod) revert GracePeriodNotOver();
@@ -283,8 +286,10 @@ contract OracleGuard is AccessControlDefaultAdminRules {
         uint8 dec = feed.decimals();
         if (dec == 0 || dec > 36) revert InvalidFeed();
         // El feed debe responder con un precio válido al configurarlo.
-        // slither-disable-next-line unused-return
+        // slither-disable-start unused-return
+        // forge-lint: disable-next-line(unused-return)
         (, int256 a,, uint256 u,) = feed.latestRoundData();
+        // slither-disable-end unused-return
         if (a <= 0 || u == 0) revert InvalidFeed();
         _feeds[key] = FeedConfig(feed, maxStaleness, dec, minPrice, maxPrice);
         emit FeedSet(key, address(feed), maxStaleness, minPrice, maxPrice);
@@ -294,23 +299,26 @@ contract OracleGuard is AccessControlDefaultAdminRules {
 
     function tightenMargin(uint256 newBps) external onlyRole(GUARDIAN_ROLE) {
         if (newBps >= marginBps) revert NotTighter();
-        _emit("marginBps", marginBps, newBps);
+        uint256 old = marginBps;
         marginBps = newBps;
+        emit ParamChanged("marginBps", old, newBps);
     }
 
     function relaxMargin(uint256 newBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newBps <= marginBps) revert NotLooser();
         if (newBps > MAX_MARGIN_BPS) revert OutOfBounds();
-        _emit("marginBps", marginBps, newBps);
+        uint256 old = marginBps;
         marginBps = newBps;
+        emit ParamChanged("marginBps", old, newBps);
     }
 
     function tightenStaleness(bytes32 key, uint32 newMax) external onlyRole(GUARDIAN_ROLE) {
         FeedConfig storage c = _feeds[key];
         if (address(c.feed) == address(0)) revert FeedNotSet(key);
         if (newMax >= c.maxStaleness || newMax == 0) revert NotTighter();
-        _emit(key, c.maxStaleness, newMax);
+        uint256 old = c.maxStaleness;
         c.maxStaleness = newMax;
+        emit ParamChanged(key, old, newMax);
     }
 
     function relaxStaleness(bytes32 key, uint32 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -318,59 +326,63 @@ contract OracleGuard is AccessControlDefaultAdminRules {
         if (address(c.feed) == address(0)) revert FeedNotSet(key);
         if (newMax <= c.maxStaleness) revert NotLooser();
         if (newMax > MAX_STALENESS_CAP) revert OutOfBounds();
-        _emit(key, c.maxStaleness, newMax);
+        uint256 old = c.maxStaleness;
         c.maxStaleness = newMax;
+        emit ParamChanged(key, old, newMax);
     }
 
     function tightenGracePeriod(uint256 newGrace) external onlyRole(GUARDIAN_ROLE) {
         if (newGrace <= gracePeriod) revert NotTighter();
         if (newGrace > 1 days) revert OutOfBounds();
-        _emit("gracePeriod", gracePeriod, newGrace);
+        uint256 old = gracePeriod;
         gracePeriod = newGrace;
+        emit ParamChanged("gracePeriod", old, newGrace);
     }
 
     function relaxGracePeriod(uint256 newGrace) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newGrace >= gracePeriod) revert NotLooser();
         if (newGrace < MIN_GRACE_PERIOD) revert OutOfBounds();
-        _emit("gracePeriod", gracePeriod, newGrace);
+        uint256 old = gracePeriod;
         gracePeriod = newGrace;
+        emit ParamChanged("gracePeriod", old, newGrace);
     }
 
     function tightenWrapperThreshold(uint256 newThreshold) external onlyRole(GUARDIAN_ROLE) {
         if (newThreshold <= wrapperBlockThreshold) revert NotTighter();
         if (newThreshold > WAD) revert OutOfBounds();
-        _emit("wrapperBlockThreshold", wrapperBlockThreshold, newThreshold);
+        uint256 old = wrapperBlockThreshold;
         wrapperBlockThreshold = newThreshold;
+        emit ParamChanged("wrapperBlockThreshold", old, newThreshold);
     }
 
     function relaxWrapperThreshold(uint256 newThreshold) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newThreshold >= wrapperBlockThreshold) revert NotLooser();
         if (newThreshold < MIN_WRAPPER_THRESHOLD) revert OutOfBounds();
-        _emit("wrapperBlockThreshold", wrapperBlockThreshold, newThreshold);
+        uint256 old = wrapperBlockThreshold;
         wrapperBlockThreshold = newThreshold;
+        emit ParamChanged("wrapperBlockThreshold", old, newThreshold);
     }
 
     function setWrapperAlertThreshold(uint256 newThreshold) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newThreshold < MIN_WRAPPER_THRESHOLD || newThreshold > WAD) revert OutOfBounds();
-        _emit("wrapperAlertThreshold", wrapperAlertThreshold, newThreshold);
+        uint256 old = wrapperAlertThreshold;
         wrapperAlertThreshold = newThreshold;
+        emit ParamChanged("wrapperAlertThreshold", old, newThreshold);
     }
 
     function tightenMinStablePrice(uint256 newMin) external onlyRole(GUARDIAN_ROLE) {
         if (newMin <= minStablePrice) revert NotTighter();
         if (newMin > WAD) revert OutOfBounds();
-        _emit("minStablePrice", minStablePrice, newMin);
+        uint256 old = minStablePrice;
         minStablePrice = newMin;
+        emit ParamChanged("minStablePrice", old, newMin);
     }
 
     function relaxMinStablePrice(uint256 newMin) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newMin >= minStablePrice) revert NotLooser();
         if (newMin < MIN_STABLE_PRICE_FLOOR) revert OutOfBounds();
-        _emit("minStablePrice", minStablePrice, newMin);
+        uint256 old = minStablePrice;
         minStablePrice = newMin;
-    }
-
-    function _emit(bytes32 param, uint256 oldValue, uint256 newValue) internal {
-        emit ParamChanged(param, oldValue, newValue);
+        emit ParamChanged("minStablePrice", old, newMin);
     }
 }

@@ -225,8 +225,9 @@ contract OracleGuardTest is Test {
 
     function test_checkBuy_revertsWhenFeedStale() public {
         (uint256 b, uint256 e) = _basketWorth(1_000e18);
-        vm.warp(block.timestamp + HOUR_STALE + 1);
-        seq.setStartedAt(block.timestamp - 2 hours);
+        uint256 later = vm.getBlockTimestamp() + HOUR_STALE + 1;
+        vm.warp(later);
+        seq.setStartedAt(later - 2 hours);
         vm.expectRevert();
         guard.checkBuy(usdc, 1_000e6, b, e);
     }

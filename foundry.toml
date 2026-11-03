@@ -31,3 +31,9 @@ fail_on_revert = false
 
 [fmt]
 line_length = 110
+
+[lint]
+# block-timestamp: el OracleGuard necesita block.timestamp para medir la antigüedad de los precios
+# y el período de gracia del sequencer. Una variación de pocos segundos no afecta esos controles
+# (los márgenes son de minutos u horas), así que el aviso no aplica.
+exclude_lints = ["block-timestamp"]

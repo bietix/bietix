@@ -3,3 +3,4 @@ cache/
 broadcast/
 .env
 lcov.info
+*.zip
