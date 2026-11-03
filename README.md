@@ -3,15 +3,18 @@
 Token ERC-20 donde **1 DUOX = 0,0001 WBTC + 0,003 WETH** (valores de prueba; los definitivos se fijan al lanzar).
 El precio del token es una fórmula de BTC y ETH, respaldada 1:1 por los activos reales que guarda el contrato.
 
-> Estado: **Paso 2 de la hoja de ruta** — núcleo (`DuoxVault`) programado y probado. Router y OracleGuard pendientes.
+> Estado: **Paso 3 de la hoja de ruta** — `DuoxVault` (núcleo) y `OracleGuard` (precios) programados y probados. Router pendiente.
 
 ## Qué hay en este repositorio
 
 ```
 src/
   DuoxVault.sol                 Núcleo: token + custodia. Inmutable, sin oráculo, sin swaps.
+  OracleGuard.sol               Red de seguridad de precios (Chainlink + sequencer de Arbitrum) para el Router.
+  interfaces/                   Interfaz de los feeds de Chainlink.
 test/
   unit/DuoxVault.t.sol          39 pruebas unitarias (funciones, errores, permisos, ataques)
+  unit/OracleGuard.t.sol        41 pruebas: precios inválidos, desactualizados, sequencer, depegs, márgenes, permisos
   fuzz/DuoxVault.fuzz.t.sol     6 pruebas con valores aleatorios (1.000 casos cada una)
   invariant/                    6 invariantes con secuencias aleatorias (25.600 llamadas cada una)
   mocks/                        Tokens falsos: normal, con comisión de transferencia, reentrante
@@ -58,9 +61,9 @@ y alcanza con `forge build && forge test`.
 
 ## Resultados actuales
 
-- **51/51 pruebas pasan** (39 unitarias, 6 fuzz, 6 invariantes).
-- **Cobertura de `DuoxVault`: 100%** de líneas, sentencias, ramas y funciones.
-- **Slither:** sin hallazgos de severidad alta, media ni baja (solo avisos de estilo por los nombres en mayúsculas de las inmutables, que es intencional).
+- **92/92 pruebas pasan** (80 unitarias, 6 fuzz del vault + 2 fuzz del oráculo dentro de las unitarias, 6 invariantes).
+- **Cobertura:** `DuoxVault` 100% en todo · `OracleGuard` 98,7% líneas y 100% ramas.
+- **Slither:** 0 hallazgos (con `slither.config.json`: se excluyen la librería OpenZeppelin, las pruebas, el aviso de estilo por nombres en mayúsculas y el aviso de uso de `block.timestamp`, que es necesario para medir la antigüedad de los precios).
 
 ### Invariantes que se verifican
 
@@ -86,6 +89,5 @@ y alcanza con `forge build && forge test`.
 
 ## Próximos pasos
 
-3. `OracleGuard` + pruebas con oráculos falsos.
 4. `DuoxRouter` (compra/venta con USDC/USDT) + pruebas unitarias y de ataque.
 5. Pruebas sobre fork de Arbitrum One (necesita un RPC).
