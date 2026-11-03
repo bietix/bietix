@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Instalar Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Formato
+        run: forge fmt --check
+
+      - name: Compilar
+        run: forge build --sizes
+
+      - name: Pruebas (unitarias, fuzz, invariantes)
+        run: forge test -vv
+
+      - name: Cobertura
+        run: forge coverage --no-match-coverage "test|mocks" --ir-minimum
+
+  slither:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: crytic/slither-action@v0.4.0
+        with:
+          target: src/
+          fail-on: medium
