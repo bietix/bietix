@@ -37,3 +37,5 @@ line_length = 110
 # y el período de gracia del sequencer. Una variación de pocos segundos no afecta esos controles
 # (los márgenes son de minutos u horas), así que el aviso no aplica.
 exclude_lints = ["block-timestamp"]
+# El linter se aplica al código de los contratos (src/). Las pruebas usan patrones propios de testing.
+ignore = ["test/**/*.sol"]

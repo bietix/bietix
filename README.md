@@ -3,7 +3,7 @@
 Token ERC-20 donde **1 DUOX = 0,0001 WBTC + 0,003 WETH** (valores de prueba; los definitivos se fijan al lanzar).
 El precio del token es una fórmula de BTC y ETH, respaldada 1:1 por los activos reales que guarda el contrato.
 
-> Estado: **Paso 3 de la hoja de ruta** — `DuoxVault` (núcleo) y `OracleGuard` (precios) programados y probados. Router pendiente.
+> Estado: **Paso 4 de la hoja de ruta** — los tres contratos (`DuoxVault`, `OracleGuard`, `DuoxRouter`) programados y probados. Próximo: pruebas sobre fork de Arbitrum One.
 
 ## Qué hay en este repositorio
 
@@ -11,10 +11,13 @@ El precio del token es una fórmula de BTC y ETH, respaldada 1:1 por los activos
 src/
   DuoxVault.sol                 Núcleo: token + custodia. Inmutable, sin oráculo, sin swaps.
   OracleGuard.sol               Red de seguridad de precios (Chainlink + sequencer de Arbitrum) para el Router.
+  DuoxRouter.sol                Compra/venta con USDC/USDT vía agregadores en lista blanca. Reemplazable, sin fondos.
   interfaces/                   Interfaz de los feeds de Chainlink.
 test/
   unit/DuoxVault.t.sol          39 pruebas unitarias (funciones, errores, permisos, ataques)
   unit/OracleGuard.t.sol        41 pruebas: precios inválidos, desactualizados, sequencer, depegs, márgenes, permisos
+  unit/DuoxRouter.t.sol         44 pruebas: compra, venta, límites, pausas, ataques (agregador malicioso,
+                                reentrada, donaciones), emergencias, permisos y 2 fuzz
   fuzz/DuoxVault.fuzz.t.sol     6 pruebas con valores aleatorios (1.000 casos cada una)
   invariant/                    6 invariantes con secuencias aleatorias (25.600 llamadas cada una)
   mocks/                        Tokens falsos: normal, con comisión de transferencia, reentrante
@@ -61,9 +64,9 @@ y alcanza con `forge build && forge test`.
 
 ## Resultados actuales
 
-- **92/92 pruebas pasan** (80 unitarias, 6 fuzz del vault + 2 fuzz del oráculo dentro de las unitarias, 6 invariantes).
-- **Cobertura:** `DuoxVault` 100% en todo · `OracleGuard` 98,7% líneas y 100% ramas.
-- **Slither:** 0 hallazgos (con `slither.config.json`: se excluyen la librería OpenZeppelin, las pruebas, el aviso de estilo por nombres en mayúsculas y el aviso de uso de `block.timestamp`, que es necesario para medir la antigüedad de los precios).
+- **131 pruebas pasan** (124 unitarias y fuzz + 6 invariantes del vault; tu versión de Foundry agrupa las invariantes en una sola línea).
+- **Cobertura:** `DuoxVault` 100% líneas · `OracleGuard` 98,8% líneas, 100% ramas · `DuoxRouter` 100% líneas. Las ramas no cubiertas del Router son controles defensivos que no se pueden alcanzar con tokens estándar (por ejemplo, "el agregador tomó más de lo aprobado").
+- **Slither:** 0 hallazgos. **Linter de Foundry:** 0 avisos (los falsos positivos están documentados línea por línea en el código).
 
 ### Invariantes que se verifican
 
@@ -77,7 +80,7 @@ y alcanza con `forge build && forge test`.
 | I8 | Parámetros dentro de techos; nadie no autorizado los cambia | ✅ |
 | I9 | Las unidades por token y los activos nunca cambian | ✅ |
 
-(I4 e I5 corresponden al Router y se agregan en el paso 4.)
+Para el Router, I4 (no retiene fondos) e I5 (no deja aprobaciones abiertas) se verifican después de cada compra y venta en las pruebas unitarias y fuzz (`_assertRouterClean`).
 
 ## Decisiones de diseño aplicadas en el núcleo
 
@@ -85,9 +88,9 @@ y alcanza con `forge build && forge test`.
 - **Comisión In-Kind de acuñación:** 0,05% en las pruebas, ajustable por el Timelock hasta un techo fijo de 1%. Se cobra en los activos y va directo a tesorería.
 - **Redención In-Kind:** sin comisión, sin mínimo y **no pausable**. La salida siempre está abierta.
 - **Mínimo de acuñación:** 0,01 DUOX.
+- **Comisiones de compra:** Router 0,25% + In-Kind del vault 0,05% = **0,30% total**. Venta: 0,30%.
 - **Roles:** Timelock = administrador (cambios que suben riesgo) · Safe = despausar, revocar guardián, rescatar tokens ajenos · Guardián = pausar y bajar el límite. Nadie puede mover el colateral.
 
 ## Próximos pasos
 
-4. `DuoxRouter` (compra/venta con USDC/USDT) + pruebas unitarias y de ataque.
 5. Pruebas sobre fork de Arbitrum One (necesita un RPC).
