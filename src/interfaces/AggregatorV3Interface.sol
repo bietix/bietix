@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.38;
 
 /// @notice Interfaz mínima de los feeds de precio de Chainlink.
 interface AggregatorV3Interface {
