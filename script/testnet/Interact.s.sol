@@ -11,10 +11,10 @@ import {TestnetToken, TestnetDex, TestnetAggregator} from "./TestnetMocks.sol";
 /// @title Operar BIETIX en testnet desde la terminal
 /// @notice Lee las direcciones del .env (TESTNET_*). Ejemplos:
 ///   Ver estado:   forge script script/testnet/Interact.s.sol --sig "status()" --rpc-url arbitrum_sepolia
-///   Comprar $100: forge script script/testnet/Interact.s.sol --sig "buy(uint256)" 100 --rpc-url arbitrum_sepolia --account bietix-testnet --broadcast
-///   Vender todo:  forge script script/testnet/Interact.s.sol --sig "sellAll()" --rpc-url arbitrum_sepolia --account bietix-testnet --broadcast
-///   Salida In-Kind: forge script script/testnet/Interact.s.sol --sig "exitInKind()" --rpc-url arbitrum_sepolia --account bietix-testnet --broadcast
-///   Refrescar feeds: forge script script/testnet/Interact.s.sol --sig "refreshFeeds()" --rpc-url arbitrum_sepolia --account bietix-testnet --broadcast
+///   Comprar $100: forge script script/testnet/Interact.s.sol --sig "buy(uint256)" 100 --rpc-url arbitrum_sepolia --account duox-testnet --broadcast
+///   Vender todo:  forge script script/testnet/Interact.s.sol --sig "sellAll()" --rpc-url arbitrum_sepolia --account duox-testnet --broadcast
+///   Salida In-Kind: forge script script/testnet/Interact.s.sol --sig "exitInKind()" --rpc-url arbitrum_sepolia --account duox-testnet --broadcast
+///   Refrescar feeds: forge script script/testnet/Interact.s.sol --sig "refreshFeeds()" --rpc-url arbitrum_sepolia --account duox-testnet --broadcast
 contract Interact is Script {
     BietixRouter internal router;
     BietixVault internal vault;

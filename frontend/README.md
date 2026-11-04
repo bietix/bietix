@@ -30,11 +30,17 @@ Abrí **http://localhost:8000** en el navegador (con MetaMask instalado). Para c
 `config.js` tiene las direcciones de cada red. La página usa Arbitrum Sepolia por defecto; con `?chain=31337`
 usa una red local (anvil) para desarrollo.
 
-## Publicarla
+## Publicación (Netlify)
 
-Como es una carpeta estática, se puede publicar gratis arrastrándola a **Netlify Drop** (app.netlify.com/drop)
-o en Cloudflare Pages. (GitHub Pages también sirve, pero en tu cuenta GitHub Actions está bloqueado por el tema
-de facturación.)
+El archivo `netlify.toml` en la raíz del repositorio le indica a Netlify que publique **solo esta carpeta** y que
+solo vuelva a publicar cuando cambie algo acá adentro. También define cabeceras de seguridad:
+
+- **Content-Security-Policy:** la página solo ejecuta su propio código y solo se conecta a los nodos de Arbitrum
+  permitidos. Si en el futuro se agrega otra red o la API de un agregador, hay que sumar su dominio a `connect-src`.
+- **X-Frame-Options:** ningún otro sitio puede mostrar la página dentro de un marco (protección contra clickjacking).
+
+Configuración en Netlify: *Add new site → Import an existing project → GitHub → repositorio* y dejar los campos
+de build vacíos (los toma de `netlify.toml`).
 
 ## Pendiente para mainnet
 

@@ -39,10 +39,10 @@ Necesitás **4 direcciones distintas**. En testnet pueden ser billeteras comunes
 ### 2. Cuenta de despliegue cifrada (nunca una clave en texto plano)
 
 ```bash
-cast wallet import bietix-testnet --interactive
+cast wallet import duox-testnet --interactive
 ```
 
-Pegás la clave privada de la billetera de despliegue y elegís una contraseña. Queda guardada cifrada en tu computadora.
+Pegás la clave privada de la billetera de despliegue y elegís una contraseña. (En testnet se usa la cuenta `duox-testnet`, creada antes del cambio de nombre; para mainnet se usa una hardware wallet con `--ledger`.) Queda guardada cifrada en tu computadora.
 
 ### 3. ETH de prueba
 
@@ -58,9 +58,9 @@ Pedí ETH de Arbitrum Sepolia en una faucet (por ejemplo la de Alchemy o la de Q
 ```bash
 source .env
 # Simulación (no envía nada, no gasta gas):
-forge script script/DeployTestnet.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC_URL --account bietix-testnet
+forge script script/DeployTestnet.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC_URL --account duox-testnet
 # Despliegue real en testnet:
-forge script script/DeployTestnet.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC_URL --account bietix-testnet --broadcast --verify
+forge script script/DeployTestnet.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC_URL --account duox-testnet --broadcast --verify
 ```
 
 Al final se imprimen todas las direcciones. **Guardalas** (también quedan en `broadcast/`).

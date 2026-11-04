@@ -10,7 +10,7 @@ import {TestnetToken, TestnetAggregator, TestnetDex} from "./testnet/TestnetMock
 /// @notice Despliega tokens, oráculos y un DEX de prueba, y después el sistema real con la misma lógica que
 ///         mainnet. Los precios de prueba los controla quien despliega (para simulacros de emergencia).
 ///
-///   forge script script/DeployTestnet.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC_URL --account bietix-testnet --broadcast
+///   forge script script/DeployTestnet.s.sol --rpc-url $ARBITRUM_SEPOLIA_RPC_URL --account duox-testnet --broadcast
 contract DeployTestnet is DeployBase {
     struct Mocks {
         TestnetToken wbtc;

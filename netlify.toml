@@ -1,0 +1,32 @@
+# Configuración de Netlify: publica SOLO la carpeta frontend/ (la página), no el resto del proyecto.
+[build]
+  base = "frontend"
+  publish = "."
+  command = ""
+  # Solo se vuelve a publicar si cambió algo dentro de frontend/ (cambios en contratos o pruebas no publican).
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- ."
+
+# Cabeceras de seguridad para todas las páginas.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # Solo se ejecuta código propio del sitio y solo se conecta a los nodos de Arbitrum permitidos.
+    # Si se agrega otra red o un agregador (por ejemplo la API de 0x), hay que sumar su dominio a connect-src.
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://sepolia-rollup.arbitrum.io https://arb1.arbitrum.io; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+    # Impide que otro sitio muestre esta página dentro de un marco (protección contra clickjacking).
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+# La librería y las fuentes no cambian entre versiones: se pueden guardar en caché por más tiempo.
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
