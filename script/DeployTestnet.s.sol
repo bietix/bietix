@@ -6,7 +6,7 @@ import {DeployBase} from "./DeployBase.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 import {TestnetToken, TestnetAggregator, TestnetDex} from "./testnet/TestnetMocks.sol";
 
-/// @title Despliegue completo de BIETIX en Arbitrum Sepolia (testnet)
+/// @title Despliegue completo de DUOX en Arbitrum Sepolia (testnet)
 /// @notice Despliega tokens, oráculos y un DEX de prueba, y después el sistema real con la misma lógica que
 ///         mainnet. Los precios de prueba los controla quien despliega (para simulacros de emergencia).
 ///
@@ -59,8 +59,8 @@ contract DeployTestnet is DeployBase {
         m = _deployMocks(deployer);
 
         Params memory p;
-        p.name = "Bietix (Testnet)";
-        p.symbol = "tBIETIX";
+        p.name = "DUOX Index (Testnet)";
+        p.symbol = "tDUOX";
         p.safe = safe;
         p.guardian = guardian;
         p.treasury = treasury;

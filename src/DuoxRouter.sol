@@ -8,15 +8,15 @@ import {
 } from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {BietixVault} from "./BietixVault.sol";
+import {DuoxVault} from "./DuoxVault.sol";
 import {OracleGuard} from "./OracleGuard.sol";
 
-/// @title BietixRouter — compra y venta de BIETIX con stablecoins
+/// @title DuoxRouter — compra y venta de DUOX con stablecoins
 /// @notice Convierte USDC/USDT ↔ WBTC/WETH mediante agregadores en lista blanca y llama al vault como
 ///         cualquier usuario. No retiene fondos entre transacciones y es reemplazable sin migrar nada.
 /// @dev Ver Especificaciones Técnicas, secciones 1.4 y 3. Comisión total de compra = comisión del Router
 ///      + comisión In-Kind del vault (el Router paga la del vault como cualquier usuario).
-contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
+contract DuoxRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     bytes32 public constant GUARDIAN_ROLE = keccak256("GUARDIAN_ROLE");
@@ -36,7 +36,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         bytes data;
     }
 
-    BietixVault public immutable VAULT;
+    DuoxVault public immutable VAULT;
     IERC20 public immutable ASSET_BTC;
     IERC20 public immutable ASSET_ETH;
 
@@ -100,7 +100,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
     error BalanceMismatch(address token);
 
     struct Config {
-        BietixVault vault;
+        DuoxVault vault;
         OracleGuard oracle;
         address admin; // Timelock
         uint48 adminTransferDelay;
@@ -148,13 +148,13 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
 
     // ═══════════════════════════════ Compra ═══════════════════════════════
 
-    /// @notice Compra BIETIX con una stablecoin.
+    /// @notice Compra DUOX con una stablecoin.
     /// @param stable stablecoin en lista blanca (USDC, USDT)
     /// @param amountIn monto total que entrega el usuario (comisión incluida)
-    /// @param minShares mínimo de BIETIX que acepta recibir (protección contra slippage)
+    /// @param minShares mínimo de DUOX que acepta recibir (protección contra slippage)
     /// @param steps swaps stable → WBTC y stable → WETH, armados fuera de la cadena con la API del agregador
     /// @param deadline fecha límite de la transacción
-    /// @param receiver quién recibe los BIETIX
+    /// @param receiver quién recibe los DUOX
     function buy(
         address stable,
         uint256 amountIn,
@@ -193,8 +193,8 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
 
     // ═══════════════════════════════ Venta ═══════════════════════════════
 
-    /// @notice Vende BIETIX por una stablecoin.
-    /// @param shares BIETIX a vender (el usuario debe haber aprobado al Router)
+    /// @notice Vende DUOX por una stablecoin.
+    /// @param shares DUOX a vender (el usuario debe haber aprobado al Router)
     /// @param stable stablecoin que quiere recibir
     /// @param minAmountOut mínimo neto que acepta recibir
     /// @param steps swaps WBTC → stable y WETH → stable
@@ -222,7 +222,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
 
         uint256[4] memory start = _snapshot(stable);
 
-        // 2-3. Tomar los BIETIX y redimir In-Kind hacia el Router
+        // 2-3. Tomar los DUOX y redimir In-Kind hacia el Router
         IERC20(address(VAULT)).safeTransferFrom(msg.sender, address(this), shares);
         // Lo recibido se mide por saldos en _swapAndPay; la función es nonReentrant.
         // slither-disable-start unused-return
@@ -257,7 +257,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         // 6. Control contra oráculo (incluye sequencer, depeg del wrapper y de la stable)
         oracle.checkBuy(stable, spent, btcGot, ethGot);
 
-        // 7. Calcular BIETIX a acuñar con lo realmente recibido (incluye la comisión In-Kind del vault)
+        // 7. Calcular DUOX a acuñar con lo realmente recibido (incluye la comisión In-Kind del vault)
         shares = _sharesFor(btcGot, ethGot);
         // slither-disable-next-line incorrect-equality
         if (shares < minShares || shares == 0) revert InsufficientOutput(shares, minShares);
@@ -315,7 +315,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
 
     // ═══════════════════════════════ Vistas ═══════════════════════════════
 
-    /// @notice Cuántos BIETIX se pueden acuñar con estas cantidades, descontando la comisión In-Kind del vault.
+    /// @notice Cuántos DUOX se pueden acuñar con estas cantidades, descontando la comisión In-Kind del vault.
     function sharesFor(uint256 btcAmount, uint256 ethAmount) external view returns (uint256) {
         return _sharesFor(btcAmount, ethAmount);
     }
@@ -409,7 +409,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         return nowBal < before ? before - nowBal : 0;
     }
 
-    /// @dev Mayor cantidad de BIETIX tal que activos + comisión In-Kind ≤ lo recibido.
+    /// @dev Mayor cantidad de DUOX tal que activos + comisión In-Kind ≤ lo recibido.
     function _sharesFor(uint256 btcAmount, uint256 ethAmount) internal view returns (uint256 shares) {
         uint256 feeBps = VAULT.mintFeeBps();
         uint256 unitBtc = VAULT.UNIT_BTC();

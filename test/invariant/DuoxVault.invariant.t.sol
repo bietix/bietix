@@ -6,7 +6,7 @@ import {VaultTestBase} from "../utils/VaultTestBase.sol";
 import {VaultHandler} from "./VaultHandler.sol";
 
 /// @notice Invariantes del sistema (sección 6.4 de las especificaciones) para el núcleo.
-contract BietixVaultInvariantTest is VaultTestBase {
+contract DuoxVaultInvariantTest is VaultTestBase {
     VaultHandler internal handler;
 
     function setUp() public override {

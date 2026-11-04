@@ -4,16 +4,16 @@ pragma solidity 0.8.28;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {BietixVault} from "../../src/BietixVault.sol";
+import {DuoxVault} from "../../src/DuoxVault.sol";
 import {MockERC20, FeeOnTransferToken, ReentrantToken, IReenterTarget} from "../mocks/MockERC20.sol";
 import {VaultTestBase} from "../utils/VaultTestBase.sol";
 
-contract BietixVaultUnitTest is VaultTestBase {
+contract DuoxVaultUnitTest is VaultTestBase {
     // ───────────────────────────── Constructor ─────────────────────────────
 
     function test_constructor_setsConfig() public view {
-        assertEq(vault.name(), "Bietix");
-        assertEq(vault.symbol(), "BIETIX");
+        assertEq(vault.name(), "DUOX Index");
+        assertEq(vault.symbol(), "DUOX");
         assertEq(address(vault.ASSET_BTC()), address(wbtc));
         assertEq(address(vault.ASSET_ETH()), address(weth));
         assertEq(vault.UNIT_BTC(), UNIT_BTC);
@@ -29,55 +29,55 @@ contract BietixVaultUnitTest is VaultTestBase {
     }
 
     function test_constructor_revertsOnZeroAddresses() public {
-        BietixVault.Config memory c = _config(IERC20(address(wbtc)), IERC20(address(weth)));
+        DuoxVault.Config memory c = _config(IERC20(address(wbtc)), IERC20(address(weth)));
         c.treasury = address(0);
-        vm.expectRevert(BietixVault.ZeroAddress.selector);
-        new BietixVault("D", "D", c);
+        vm.expectRevert(DuoxVault.ZeroAddress.selector);
+        new DuoxVault("D", "D", c);
 
         c = _config(IERC20(address(0)), IERC20(address(weth)));
-        vm.expectRevert(BietixVault.ZeroAddress.selector);
-        new BietixVault("D", "D", c);
+        vm.expectRevert(DuoxVault.ZeroAddress.selector);
+        new DuoxVault("D", "D", c);
 
         c = _config(IERC20(address(wbtc)), IERC20(address(weth)));
         c.guardian = address(0);
-        vm.expectRevert(BietixVault.ZeroAddress.selector);
-        new BietixVault("D", "D", c);
+        vm.expectRevert(DuoxVault.ZeroAddress.selector);
+        new DuoxVault("D", "D", c);
 
         c = _config(IERC20(address(wbtc)), IERC20(address(weth)));
         c.safe = address(0);
-        vm.expectRevert(BietixVault.ZeroAddress.selector);
-        new BietixVault("D", "D", c);
+        vm.expectRevert(DuoxVault.ZeroAddress.selector);
+        new DuoxVault("D", "D", c);
     }
 
     function test_constructor_revertsOnInvalidConfig() public {
-        BietixVault.Config memory c = _config(IERC20(address(wbtc)), IERC20(address(wbtc)));
-        vm.expectRevert(BietixVault.InvalidConfig.selector);
-        new BietixVault("D", "D", c);
+        DuoxVault.Config memory c = _config(IERC20(address(wbtc)), IERC20(address(wbtc)));
+        vm.expectRevert(DuoxVault.InvalidConfig.selector);
+        new DuoxVault("D", "D", c);
 
         c = _config(IERC20(address(wbtc)), IERC20(address(weth)));
         c.unitBtc = 0;
-        vm.expectRevert(BietixVault.InvalidConfig.selector);
-        new BietixVault("D", "D", c);
+        vm.expectRevert(DuoxVault.InvalidConfig.selector);
+        new DuoxVault("D", "D", c);
 
         c = _config(IERC20(address(wbtc)), IERC20(address(weth)));
         c.unitEth = 0;
-        vm.expectRevert(BietixVault.InvalidConfig.selector);
-        new BietixVault("D", "D", c);
+        vm.expectRevert(DuoxVault.InvalidConfig.selector);
+        new DuoxVault("D", "D", c);
 
         c = _config(IERC20(address(wbtc)), IERC20(address(weth)));
         c.mintFeeBps = 101;
-        vm.expectRevert(BietixVault.FeeTooHigh.selector);
-        new BietixVault("D", "D", c);
+        vm.expectRevert(DuoxVault.FeeTooHigh.selector);
+        new DuoxVault("D", "D", c);
     }
 
     // ───────────────────────────── Acuñación ─────────────────────────────
 
     function test_mint_transfersExactAssetsAndFee() public {
-        uint256 shares = 10e18; // 10 BIETIX = 0,001 BTC + 0,03 ETH
+        uint256 shares = 10e18; // 10 DUOX = 0,001 BTC + 0,03 ETH
         _fundAndApprove(alice, shares);
 
         vm.expectEmit(true, true, false, true);
-        emit BietixVault.Minted(alice, alice, shares, 100_000, 3e16, 50, 15e12);
+        emit DuoxVault.Minted(alice, alice, shares, 100_000, 3e16, 50, 15e12);
         vm.prank(alice);
         (uint256 b, uint256 e) = vault.mintInKind(shares, alice);
 
@@ -102,7 +102,7 @@ contract BietixVaultUnitTest is VaultTestBase {
     }
 
     function test_mint_roundsUpForUser() public {
-        // 0,01 BIETIX + 1 unidad mínima: el BTC no divide exacto y se redondea hacia arriba
+        // 0,01 DUOX + 1 unidad mínima: el BTC no divide exacto y se redondea hacia arriba
         uint256 shares = 1e16 + 1;
         (uint256 b, uint256 e) = vault.assetsForShares(shares, Math.Rounding.Ceil);
         (uint256 bf, uint256 ef) = vault.assetsForShares(shares, Math.Rounding.Floor);
@@ -125,7 +125,7 @@ contract BietixVaultUnitTest is VaultTestBase {
     function test_mint_revertsBelowMinimum() public {
         _fundAndApprove(alice, 1e16);
         vm.prank(alice);
-        vm.expectRevert(BietixVault.BelowMinimum.selector);
+        vm.expectRevert(DuoxVault.BelowMinimum.selector);
         vault.mintInKind(1e16 - 1, alice);
     }
 
@@ -134,7 +134,7 @@ contract BietixVaultUnitTest is VaultTestBase {
         vault.pauseMint();
         _fundAndApprove(alice, 1e18);
         vm.prank(alice);
-        vm.expectRevert(BietixVault.MintIsPaused.selector);
+        vm.expectRevert(DuoxVault.MintIsPaused.selector);
         vault.mintInKind(1e18, alice);
     }
 
@@ -144,14 +144,14 @@ contract BietixVaultUnitTest is VaultTestBase {
         _mint(alice, 5e18); // justo en el límite: OK
         _fundAndApprove(bob, 1e16);
         vm.prank(bob);
-        vm.expectRevert(BietixVault.SupplyCapExceeded.selector);
+        vm.expectRevert(DuoxVault.SupplyCapExceeded.selector);
         vault.mintInKind(1e16, bob);
     }
 
     function test_mint_revertsZeroReceiver() public {
         _fundAndApprove(alice, 1e18);
         vm.prank(alice);
-        vm.expectRevert(BietixVault.ZeroAddress.selector);
+        vm.expectRevert(DuoxVault.ZeroAddress.selector);
         vault.mintInKind(1e18, address(0));
     }
 
@@ -165,13 +165,13 @@ contract BietixVaultUnitTest is VaultTestBase {
 
     function test_mint_revertsWithFeeOnTransferAsset() public {
         FeeOnTransferToken fot = new FeeOnTransferToken();
-        BietixVault v = new BietixVault("D", "D", _config(IERC20(address(fot)), IERC20(address(weth))));
+        DuoxVault v = new DuoxVault("D", "D", _config(IERC20(address(fot)), IERC20(address(weth))));
         fot.mint(alice, 1e8);
         weth.mint(alice, 1e18);
         vm.startPrank(alice);
         fot.approve(address(v), type(uint256).max);
         weth.approve(address(v), type(uint256).max);
-        vm.expectRevert(BietixVault.UnexpectedTransferAmount.selector);
+        vm.expectRevert(DuoxVault.UnexpectedTransferAmount.selector);
         v.mintInKind(1e18, alice);
         vm.stopPrank();
     }
@@ -181,7 +181,7 @@ contract BietixVaultUnitTest is VaultTestBase {
     function test_redeem_returnsExactAssets() public {
         _mint(alice, 10e18);
         vm.expectEmit(true, true, false, true);
-        emit BietixVault.Redeemed(alice, alice, 4e18, 40_000, 12e15);
+        emit DuoxVault.Redeemed(alice, alice, 4e18, 40_000, 12e15);
         vm.prank(alice);
         (uint256 b, uint256 e) = vault.redeemInKind(4e18, alice);
         assertEq(b, 40_000);
@@ -202,7 +202,7 @@ contract BietixVaultUnitTest is VaultTestBase {
 
     function test_redeem_roundsDownForUser() public {
         _mint(alice, 1e18);
-        // 1 unidad mínima de BIETIX vale fracciones de sat y de wei → recibe 0 (el vault no pierde nada)
+        // 1 unidad mínima de DUOX vale fracciones de sat y de wei → recibe 0 (el vault no pierde nada)
         vm.prank(alice);
         (uint256 b, uint256 e) = vault.redeemInKind(1, alice);
         assertEq(b, 0);
@@ -227,20 +227,20 @@ contract BietixVaultUnitTest is VaultTestBase {
     function test_redeem_belowMintMinimumIsAllowed() public {
         _mint(alice, 1e18);
         vm.prank(alice);
-        vault.redeemInKind(1e15, alice); // 0,001 BIETIX: menor al mínimo de acuñación, igual puede salir
+        vault.redeemInKind(1e15, alice); // 0,001 DUOX: menor al mínimo de acuñación, igual puede salir
         assertEq(vault.balanceOf(alice), 1e18 - 1e15);
     }
 
     function test_redeem_revertsOnZero() public {
         vm.prank(alice);
-        vm.expectRevert(BietixVault.ZeroShares.selector);
+        vm.expectRevert(DuoxVault.ZeroShares.selector);
         vault.redeemInKind(0, alice);
     }
 
     function test_redeem_revertsZeroReceiver() public {
         _mint(alice, 1e18);
         vm.prank(alice);
-        vm.expectRevert(BietixVault.ZeroAddress.selector);
+        vm.expectRevert(DuoxVault.ZeroAddress.selector);
         vault.redeemInKind(1e18, address(0));
     }
 
@@ -279,7 +279,7 @@ contract BietixVaultUnitTest is VaultTestBase {
 
     function test_reentrancy_isBlocked() public {
         ReentrantToken re = new ReentrantToken();
-        BietixVault v = new BietixVault("D", "D", _config(IERC20(address(wbtc)), IERC20(address(re))));
+        DuoxVault v = new DuoxVault("D", "D", _config(IERC20(address(wbtc)), IERC20(address(re))));
         // fondear al token malicioso para que pueda intentar operar
         wbtc.mint(address(re), 1e8);
         re.mint(address(re), 1e18);
@@ -344,7 +344,7 @@ contract BietixVaultUnitTest is VaultTestBase {
         vault.decreaseSupplyCap(100e18);
         assertEq(vault.supplyCap(), 100e18);
         vm.prank(guardian);
-        vm.expectRevert(BietixVault.CapNotLower.selector);
+        vm.expectRevert(DuoxVault.CapNotLower.selector);
         vault.decreaseSupplyCap(200e18);
         vm.prank(attacker);
         vm.expectRevert();
@@ -362,7 +362,7 @@ contract BietixVaultUnitTest is VaultTestBase {
         vault.increaseSupplyCap(CAP * 2);
         assertEq(vault.supplyCap(), CAP * 2);
         vm.prank(timelock);
-        vm.expectRevert(BietixVault.CapNotHigher.selector);
+        vm.expectRevert(DuoxVault.CapNotHigher.selector);
         vault.increaseSupplyCap(CAP);
     }
 
@@ -377,7 +377,7 @@ contract BietixVaultUnitTest is VaultTestBase {
         vault.setMintFee(100);
         assertEq(vault.mintFeeBps(), 100);
         vm.prank(timelock);
-        vm.expectRevert(BietixVault.FeeTooHigh.selector);
+        vm.expectRevert(DuoxVault.FeeTooHigh.selector);
         vault.setMintFee(101);
     }
 
@@ -389,7 +389,7 @@ contract BietixVaultUnitTest is VaultTestBase {
             vault.setTreasury(bob);
         }
         vm.prank(timelock);
-        vm.expectRevert(BietixVault.ZeroAddress.selector);
+        vm.expectRevert(DuoxVault.ZeroAddress.selector);
         vault.setTreasury(address(0));
         vm.prank(timelock);
         vault.setTreasury(bob);
@@ -439,13 +439,13 @@ contract BietixVaultUnitTest is VaultTestBase {
     function test_sweep_cannotTouchCollateral() public {
         _mint(alice, 1e18);
         vm.startPrank(safe);
-        vm.expectRevert(BietixVault.ProtectedAsset.selector);
+        vm.expectRevert(DuoxVault.ProtectedAsset.selector);
         vault.sweep(IERC20(address(wbtc)));
-        vm.expectRevert(BietixVault.ProtectedAsset.selector);
+        vm.expectRevert(DuoxVault.ProtectedAsset.selector);
         vault.sweep(IERC20(address(weth)));
         vm.stopPrank();
         vm.prank(timelock);
-        vm.expectRevert(BietixVault.ProtectedAsset.selector);
+        vm.expectRevert(DuoxVault.ProtectedAsset.selector);
         vault.sweep(IERC20(address(wbtc)));
     }
 

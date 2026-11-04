@@ -3,10 +3,10 @@ pragma solidity 0.8.28;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {BietixVault} from "../../src/BietixVault.sol";
+import {DuoxVault} from "../../src/DuoxVault.sol";
 import {OracleGuard} from "../../src/OracleGuard.sol";
 import {noFeeds, noStables, noAddresses} from "../utils/Empty.sol";
-import {BietixRouter} from "../../src/BietixRouter.sol";
+import {DuoxRouter} from "../../src/DuoxRouter.sol";
 import {AggregatorV3Interface} from "../../src/interfaces/AggregatorV3Interface.sol";
 
 /// @notice Interfaz mínima de SwapRouter02 de Uniswap V3.
@@ -50,9 +50,9 @@ contract ArbitrumForkTest is Test {
     address internal treasury = makeAddr("treasury");
     address internal alice = makeAddr("alice");
 
-    BietixVault internal vault;
+    DuoxVault internal vault;
     OracleGuard internal guard;
-    BietixRouter internal router;
+    DuoxRouter internal router;
     uint256 internal unitBtc;
     uint256 internal unitEth;
     bool internal forked;
@@ -90,10 +90,10 @@ contract ArbitrumForkTest is Test {
         uint256 btcPart = guard.wbtcUsd() * unitBtc / 1e8; // USD (18 dec)
         unitEth = btcPart * 1e18 / guard.ethUsd();
 
-        vault = new BietixVault(
-            "Bietix",
-            "BIETIX",
-            BietixVault.Config({
+        vault = new DuoxVault(
+            "DUOX Index",
+            "DUOX",
+            DuoxVault.Config({
                 assetBtc: IERC20(WBTC),
                 assetEth: IERC20(WETH),
                 unitBtc: unitBtc,
@@ -107,8 +107,8 @@ contract ArbitrumForkTest is Test {
                 supplyCap: type(uint256).max
             })
         );
-        router = new BietixRouter(
-            BietixRouter.Config({
+        router = new DuoxRouter(
+            DuoxRouter.Config({
                 vault: vault,
                 oracle: guard,
                 admin: timelock,
@@ -150,7 +150,7 @@ contract ArbitrumForkTest is Test {
         _checkFeed(FEED_USDT_USD, "USDT / USD");
         guard.checkSequencer();
         console2.log("Sequencer de Arbitrum: activo");
-        console2.log("Precio de 1 BIETIX (USD x1e18):", guard.indexPriceUsd(unitBtc, unitEth));
+        console2.log("Precio de 1 DUOX (USD x1e18):", guard.indexPriceUsd(unitBtc, unitEth));
         console2.log("unitBtc (sats):", unitBtc);
         console2.log("unitEth (wei):", unitEth);
     }
@@ -208,7 +208,7 @@ contract ArbitrumForkTest is Test {
         uint256 roundBps = out >= amountIn ? 0 : (amountIn - out) * 10_000 / amountIn;
 
         console2.log("=== Monto (unidades de 6 dec):", amountIn);
-        console2.log("BIETIX recibidos (x1e18):", shares);
+        console2.log("DUOX recibidos (x1e18):", shares);
         console2.log("Costo de entrada total (bps, incluye 30 de comision):", costBps);
         console2.log("Recibido al vender:", out);
         console2.log("Costo ida y vuelta (bps, incluye 60 de comisiones):", roundBps);
@@ -227,7 +227,7 @@ contract ArbitrumForkTest is Test {
         uint256 net = amountIn - (amountIn * router.buyFeeBps() + 9_999) / 10_000;
         uint256 half = net / 2;
 
-        BietixRouter.SwapStep[] memory steps = new BietixRouter.SwapStep[](2);
+        DuoxRouter.SwapStep[] memory steps = new DuoxRouter.SwapStep[](2);
         steps[0] = _uniStep(stable, half, _pathToBtc(stable));
         steps[1] = _uniStep(stable, net - half, _pathToEth(stable));
 
@@ -239,7 +239,7 @@ contract ArbitrumForkTest is Test {
 
     function _sell(address stable, uint256 shares) internal returns (uint256 out) {
         (uint256 b, uint256 e) = vault.previewRedeem(shares);
-        BietixRouter.SwapStep[] memory steps = new BietixRouter.SwapStep[](2);
+        DuoxRouter.SwapStep[] memory steps = new DuoxRouter.SwapStep[](2);
         steps[0] = _uniStep(WBTC, b, _pathFromBtc(stable));
         steps[1] = _uniStep(WETH, e, _pathFromEth(stable));
 
@@ -252,7 +252,7 @@ contract ArbitrumForkTest is Test {
     function _uniStep(address tokenIn, uint256 amountIn, bytes memory path)
         internal
         view
-        returns (BietixRouter.SwapStep memory)
+        returns (DuoxRouter.SwapStep memory)
     {
         // amountOutMinimum = 0 porque el Router controla contra el oráculo y el usuario fija su mínimo.
         bytes memory data = abi.encodeCall(
@@ -261,8 +261,7 @@ contract ArbitrumForkTest is Test {
                     path: path, recipient: address(router), amountIn: amountIn, amountOutMinimum: 0
                 }))
         );
-        return
-            BietixRouter.SwapStep({target: UNISWAP_ROUTER, tokenIn: tokenIn, amountIn: amountIn, data: data});
+        return DuoxRouter.SwapStep({target: UNISWAP_ROUTER, tokenIn: tokenIn, amountIn: amountIn, data: data});
     }
 
     // Rutas por los pools más profundos de Uniswap V3 en Arbitrum (0,05%), pasando por USDC si es USDT.

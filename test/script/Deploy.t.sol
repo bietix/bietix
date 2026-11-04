@@ -7,8 +7,8 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 import {DeployTestnet} from "../../script/DeployTestnet.s.sol";
 import {Deploy} from "../../script/Deploy.s.sol";
 import {DeployBase} from "../../script/DeployBase.sol";
-import {BietixRouter} from "../../src/BietixRouter.sol";
-import {BietixVault} from "../../src/BietixVault.sol";
+import {DuoxRouter} from "../../src/DuoxRouter.sol";
+import {DuoxVault} from "../../src/DuoxVault.sol";
 import {OracleGuard} from "../../src/OracleGuard.sol";
 import {TestnetDex} from "../../script/testnet/TestnetMocks.sol";
 
@@ -58,7 +58,7 @@ contract DeployTest is Test {
         uint256 net = amountIn - (amountIn * 25 + 9_999) / 10_000;
         uint256 half = net / 2;
 
-        BietixRouter.SwapStep[] memory steps = new BietixRouter.SwapStep[](2);
+        DuoxRouter.SwapStep[] memory steps = new DuoxRouter.SwapStep[](2);
         steps[0] = _dexStep(address(m.usdc), half, address(m.wbtc));
         steps[1] = _dexStep(address(m.usdc), net - half, address(m.weth));
 
@@ -69,7 +69,7 @@ contract DeployTest is Test {
         assertGt(shares, 0);
 
         (uint256 b, uint256 e) = d.vault.previewRedeem(shares);
-        BietixRouter.SwapStep[] memory sellSteps = new BietixRouter.SwapStep[](2);
+        DuoxRouter.SwapStep[] memory sellSteps = new DuoxRouter.SwapStep[](2);
         sellSteps[0] = _dexStep(address(m.wbtc), b, address(m.usdc));
         sellSteps[1] = _dexStep(address(m.weth), e, address(m.usdc));
         uint256 before = m.usdc.balanceOf(alice);
@@ -85,7 +85,7 @@ contract DeployTest is Test {
 
     function test_governance_safeProposesTimelockExecutes() public {
         TimelockController t = d.timelock;
-        bytes memory call = abi.encodeCall(BietixVault.increaseSupplyCap, (2_000_000e18));
+        bytes memory call = abi.encodeCall(DuoxVault.increaseSupplyCap, (2_000_000e18));
         uint256 delay = t.getMinDelay();
 
         vm.prank(safe);
@@ -104,7 +104,7 @@ contract DeployTest is Test {
 
     function test_governance_guardianCancelsMaliciousProposal() public {
         TimelockController t = d.timelock;
-        bytes memory call = abi.encodeCall(BietixVault.setTreasury, (makeAddr("atacante")));
+        bytes memory call = abi.encodeCall(DuoxVault.setTreasury, (makeAddr("atacante")));
         uint256 delay = t.getMinDelay();
         vm.prank(safe); // el Safe fue comprometido y propone cambiar la tesorería
         t.schedule(address(d.vault), 0, call, bytes32(0), bytes32("malo"), delay);
@@ -119,7 +119,7 @@ contract DeployTest is Test {
 
     function test_governance_onlySafeCanPropose() public {
         TimelockController t = d.timelock;
-        bytes memory call = abi.encodeCall(BietixVault.setMintFee, (100));
+        bytes memory call = abi.encodeCall(DuoxVault.setMintFee, (100));
         address[3] memory notAllowed = [guardian, alice, address(script)];
         uint256 delay = t.getMinDelay();
         for (uint256 i; i < notAllowed.length; i++) {
@@ -150,7 +150,7 @@ contract DeployTest is Test {
         m.wrap.setAnswer(0.97e8);
         assertTrue(d.oracle.wrapperAlert());
         uint256 net = 1_000e6 - 2.5e6;
-        BietixRouter.SwapStep[] memory steps = new BietixRouter.SwapStep[](2);
+        DuoxRouter.SwapStep[] memory steps = new DuoxRouter.SwapStep[](2);
         steps[0] = _dexStep(address(m.usdc), net / 2, address(m.wbtc));
         steps[1] = _dexStep(address(m.usdc), net - net / 2, address(m.weth));
         vm.startPrank(alice);
@@ -185,9 +185,9 @@ contract DeployTest is Test {
     function _dexStep(address tokenIn, uint256 amountIn, address tokenOut)
         internal
         view
-        returns (BietixRouter.SwapStep memory)
+        returns (DuoxRouter.SwapStep memory)
     {
-        return BietixRouter.SwapStep({
+        return DuoxRouter.SwapStep({
             target: address(m.dex),
             tokenIn: tokenIn,
             amountIn: amountIn,
@@ -222,7 +222,7 @@ contract DeployMainnetForkTest is Test {
         assertEq(address(dep.vault.ASSET_BTC()), 0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f);
         assertGt(dep.oracle.indexPriceUsd(dep.vault.UNIT_BTC(), dep.vault.UNIT_ETH()), 0);
         assertTrue(dep.router.isStable(0xaf88d065e77c8cC2239327C5EDb3A432268e5831));
-        IERC20(address(dep.vault)); // BIETIX es un ERC-20
+        IERC20(address(dep.vault)); // DUOX es un ERC-20
     }
 }
 

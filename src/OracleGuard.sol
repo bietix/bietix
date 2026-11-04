@@ -7,10 +7,10 @@ import {
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 
-/// @title OracleGuard — red de seguridad de precios para el Router de BIETIX
+/// @title OracleGuard — red de seguridad de precios para el Router de DUOX
 /// @notice Lee Chainlink (BTC/USD, ETH/USD, WBTC/BTC, stablecoins y Sequencer Uptime de Arbitrum) y
 ///         revierte si algún dato es inválido o si un swap rindió peor que el oráculo más allá del margen.
-/// @dev El núcleo (BietixVault) NO usa este contrato. Si falla, solo se detiene el Router y la salida
+/// @dev El núcleo (DuoxVault) NO usa este contrato. Si falla, solo se detiene el Router y la salida
 ///      In-Kind sigue abierta. Ver Especificaciones Técnicas, sección 4.
 ///      Regla de permisos: endurecer = guardián (inmediato); relajar = administrador/Timelock (con espera).
 contract OracleGuard is AccessControlDefaultAdminRules {

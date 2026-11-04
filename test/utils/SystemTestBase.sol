@@ -3,10 +3,10 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {BietixVault} from "../../src/BietixVault.sol";
+import {DuoxVault} from "../../src/DuoxVault.sol";
 import {OracleGuard} from "../../src/OracleGuard.sol";
 import {noFeeds, noStables, noAddresses} from "../utils/Empty.sol";
-import {BietixRouter} from "../../src/BietixRouter.sol";
+import {DuoxRouter} from "../../src/DuoxRouter.sol";
 import {AggregatorV3Interface} from "../../src/interfaces/AggregatorV3Interface.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {MockAggregator} from "../mocks/MockAggregator.sol";
@@ -42,9 +42,9 @@ abstract contract SystemTestBase is Test {
     MockAggregator internal usdcFeed;
     MockAggregator internal usdtFeed;
 
-    BietixVault internal vault;
+    DuoxVault internal vault;
     OracleGuard internal guard;
-    BietixRouter internal router;
+    DuoxRouter internal router;
     MockSwapTarget internal dex;
 
     function setUp() public virtual {
@@ -76,10 +76,10 @@ abstract contract SystemTestBase is Test {
         );
 
         // Vault
-        vault = new BietixVault(
-            "Bietix",
-            "BIETIX",
-            BietixVault.Config({
+        vault = new DuoxVault(
+            "DUOX Index",
+            "DUOX",
+            DuoxVault.Config({
                 assetBtc: IERC20(address(wbtc)),
                 assetEth: IERC20(address(weth)),
                 unitBtc: UNIT_BTC,
@@ -95,8 +95,8 @@ abstract contract SystemTestBase is Test {
         );
 
         // Router
-        router = new BietixRouter(
-            BietixRouter.Config({
+        router = new DuoxRouter(
+            DuoxRouter.Config({
                 vault: vault,
                 oracle: guard,
                 admin: timelock,
@@ -132,7 +132,7 @@ abstract contract SystemTestBase is Test {
     function _buySteps(address stable, uint256 amountIn, uint256 lossBps)
         internal
         view
-        returns (BietixRouter.SwapStep[] memory steps)
+        returns (DuoxRouter.SwapStep[] memory steps)
     {
         uint256 net = amountIn - (amountIn * router.buyFeeBps() + 9_999) / 10_000;
         uint256 half = net / 2;
@@ -143,7 +143,7 @@ abstract contract SystemTestBase is Test {
         uint256 btcOut = usdB * 1e8 / guard.wbtcUsd();
         uint256 ethOut = usdE * 1e18 / guard.ethUsd();
 
-        steps = new BietixRouter.SwapStep[](2);
+        steps = new DuoxRouter.SwapStep[](2);
         steps[0] = _step(stable, half, address(wbtc), btcOut);
         steps[1] = _step(stable, rest, address(weth), ethOut);
     }
@@ -152,12 +152,12 @@ abstract contract SystemTestBase is Test {
     function _sellSteps(address stable, uint256 shares, uint256 lossBps)
         internal
         view
-        returns (BietixRouter.SwapStep[] memory steps)
+        returns (DuoxRouter.SwapStep[] memory steps)
     {
         (uint256 b, uint256 e) = vault.previewRedeem(shares);
         uint256 usdB = b * guard.wbtcUsd() / 1e8 * (10_000 - lossBps) / 10_000;
         uint256 usdE = e * guard.ethUsd() / 1e18 * (10_000 - lossBps) / 10_000;
-        steps = new BietixRouter.SwapStep[](2);
+        steps = new DuoxRouter.SwapStep[](2);
         steps[0] = _step(address(wbtc), b, stable, usdB / 1e12);
         steps[1] = _step(address(weth), e, stable, usdE / 1e12);
     }
@@ -165,9 +165,9 @@ abstract contract SystemTestBase is Test {
     function _step(address tokenIn, uint256 amountIn, address tokenOut, uint256 amountOut)
         internal
         view
-        returns (BietixRouter.SwapStep memory)
+        returns (DuoxRouter.SwapStep memory)
     {
-        return BietixRouter.SwapStep({
+        return DuoxRouter.SwapStep({
             target: address(dex),
             tokenIn: tokenIn,
             amountIn: amountIn,
@@ -185,7 +185,7 @@ abstract contract SystemTestBase is Test {
 
     function _buy(address user, address stable, uint256 amountIn) internal returns (uint256 shares) {
         _fund(user, stable, amountIn);
-        BietixRouter.SwapStep[] memory steps = _buySteps(stable, amountIn, 10);
+        DuoxRouter.SwapStep[] memory steps = _buySteps(stable, amountIn, 10);
         vm.prank(user);
         shares = router.buy(stable, amountIn, 0, steps, block.timestamp, user);
     }
@@ -195,7 +195,7 @@ abstract contract SystemTestBase is Test {
         assertEq(weth.balanceOf(address(router)), 0, "router con WETH");
         assertEq(usdc.balanceOf(address(router)), 0, "router con USDC");
         assertEq(usdt.balanceOf(address(router)), 0, "router con USDT");
-        assertEq(vault.balanceOf(address(router)), 0, "router con BIETIX");
+        assertEq(vault.balanceOf(address(router)), 0, "router con DUOX");
         assertEq(usdc.allowance(address(router), address(dex)), 0, "aprobacion USDC abierta");
         assertEq(usdt.allowance(address(router), address(dex)), 0, "aprobacion USDT abierta");
         assertEq(wbtc.allowance(address(router), address(dex)), 0, "aprobacion WBTC abierta");

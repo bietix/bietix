@@ -5,7 +5,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {VaultTestBase} from "../utils/VaultTestBase.sol";
 
 /// @notice Pruebas con valores aleatorios (sección 6.5 de las especificaciones).
-contract BietixVaultFuzzTest is VaultTestBase {
+contract DuoxVaultFuzzTest is VaultTestBase {
     uint256 internal constant MAX_SHARES = 1_000_000e18;
 
     /// Acuñar y redimir enseguida nunca devuelve más de lo aportado (invariante I6).

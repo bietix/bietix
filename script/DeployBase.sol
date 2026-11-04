@@ -4,13 +4,13 @@ pragma solidity 0.8.28;
 import {Script, console2} from "forge-std/Script.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
-import {BietixVault} from "../src/BietixVault.sol";
+import {DuoxVault} from "../src/DuoxVault.sol";
 import {OracleGuard} from "../src/OracleGuard.sol";
-import {BietixRouter} from "../src/BietixRouter.sol";
+import {DuoxRouter} from "../src/DuoxRouter.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 
-/// @title Lógica común de despliegue de BIETIX (mainnet y testnet)
-/// @notice Despliega Timelock → OracleGuard → BietixVault → BietixRouter con toda la configuración inicial
+/// @title Lógica común de despliegue de DUOX (mainnet y testnet)
+/// @notice Despliega Timelock → OracleGuard → DuoxVault → DuoxRouter con toda la configuración inicial
 ///         en los constructores, y verifica al final que la billetera que despliega NO conserve ningún permiso.
 /// @dev Ver Especificaciones Técnicas, secciones 2 (controles de acceso) y 6.10 (lista de verificación).
 abstract contract DeployBase is Script {
@@ -27,8 +27,8 @@ abstract contract DeployBase is Script {
         // Activos
         address wbtc;
         address weth;
-        uint256 unitBtc; // sats por BIETIX
-        uint256 unitEth; // wei por BIETIX (0 = calcular 50/50 al precio actual)
+        uint256 unitBtc; // sats por DUOX
+        uint256 unitEth; // wei por DUOX (0 = calcular 50/50 al precio actual)
         // Oráculos
         address seqFeed;
         address btcFeed;
@@ -47,7 +47,7 @@ abstract contract DeployBase is Script {
         uint256 vaultFeeBps;
         uint256 buyFeeBps;
         uint256 sellFeeBps;
-        uint256 supplyCap; // en BIETIX (18 decimales)
+        uint256 supplyCap; // en DUOX (18 decimales)
         uint256 maxTradeUsd; // USD con 18 decimales
         uint256 sellLimitUsd; // USD con 18 decimales
     }
@@ -55,8 +55,8 @@ abstract contract DeployBase is Script {
     struct Deployment {
         TimelockController timelock;
         OracleGuard oracle;
-        BietixVault vault;
-        BietixRouter router;
+        DuoxVault vault;
+        DuoxRouter router;
     }
 
     error DeployCheckFailed(string what);
@@ -96,10 +96,10 @@ abstract contract DeployBase is Script {
         }
 
         // 4. Vault (núcleo inmutable)
-        d.vault = new BietixVault(
+        d.vault = new DuoxVault(
             p.name,
             p.symbol,
-            BietixVault.Config({
+            DuoxVault.Config({
                 assetBtc: IERC20(p.wbtc),
                 assetEth: IERC20(p.weth),
                 unitBtc: p.unitBtc,
@@ -115,8 +115,8 @@ abstract contract DeployBase is Script {
         );
 
         // 5. Router con stablecoins y agregadores habilitados desde el constructor
-        d.router = new BietixRouter(
-            BietixRouter.Config({
+        d.router = new DuoxRouter(
+            DuoxRouter.Config({
                 vault: d.vault,
                 oracle: d.oracle,
                 admin: address(d.timelock),
@@ -152,7 +152,7 @@ abstract contract DeployBase is Script {
         _check(t.hasRole(t.DEFAULT_ADMIN_ROLE(), address(t)), "timelock se administra a si mismo");
 
         // Vault
-        BietixVault v = d.vault;
+        DuoxVault v = d.vault;
         _check(v.defaultAdmin() == address(t), "admin del vault = timelock");
         _check(
             v.hasRole(v.UNPAUSER_ROLE(), p.safe) && v.hasRole(v.GUARDIAN_ROLE(), p.safe),
@@ -183,7 +183,7 @@ abstract contract DeployBase is Script {
         }
 
         // Router
-        BietixRouter r = d.router;
+        DuoxRouter r = d.router;
         _check(r.defaultAdmin() == address(t), "admin del router = timelock");
         _check(
             !r.hasRole(r.GUARDIAN_ROLE(), deployer) && !r.hasRole(r.UNPAUSER_ROLE(), deployer),
@@ -204,16 +204,16 @@ abstract contract DeployBase is Script {
     }
 
     function _log(Deployment memory d) internal view {
-        console2.log("==================== BIETIX desplegado ====================");
+        console2.log("==================== DUOX desplegado ====================");
         console2.log("Red (chainid):     ", block.chainid);
         console2.log("TimelockController:", address(d.timelock));
         console2.log("OracleGuard:       ", address(d.oracle));
-        console2.log("BietixVault (BIETIX):  ", address(d.vault));
-        console2.log("BietixRouter:        ", address(d.router));
+        console2.log("DuoxVault (DUOX):  ", address(d.vault));
+        console2.log("DuoxRouter:        ", address(d.router));
         console2.log("UNIT_BTC (sats):   ", d.vault.UNIT_BTC());
         console2.log("UNIT_ETH (wei):    ", d.vault.UNIT_ETH());
         console2.log(
-            "Precio 1 BIETIX (USD x1e18):", d.oracle.indexPriceUsd(d.vault.UNIT_BTC(), d.vault.UNIT_ETH())
+            "Precio 1 DUOX (USD x1e18):", d.oracle.indexPriceUsd(d.vault.UNIT_BTC(), d.vault.UNIT_ETH())
         );
         console2.log("Verificacion de permisos: OK (la billetera que desplego no conserva ningun rol)");
         console2.log("==========================================================");

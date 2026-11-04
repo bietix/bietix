@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {console2} from "forge-std/Script.sol";
 import {DeployBase} from "./DeployBase.sol";
 
-/// @title Despliegue de BIETIX en Arbitrum One (o cualquier red con tokens y feeds reales)
+/// @title Despliegue de DUOX en Arbitrum One (o cualquier red con tokens y feeds reales)
 /// @notice Lee toda la configuración del archivo .env (ver .env.example). Nada queda "por defecto" en lo
 ///         que importa: Safe, guardián, tesorería, antigüedad de feeds, unidades y límite de supply son obligatorios.
 ///
@@ -45,8 +45,8 @@ contract Deploy is DeployBase {
     }
 
     function _params() internal view returns (Params memory p) {
-        p.name = vm.envOr("TOKEN_NAME", string("Bietix"));
-        p.symbol = vm.envOr("TOKEN_SYMBOL", string("BIETIX"));
+        p.name = vm.envOr("TOKEN_NAME", string("DUOX Index"));
+        p.symbol = vm.envOr("TOKEN_SYMBOL", string("DUOX"));
 
         p.safe = vm.envAddress("SAFE_ADDRESS");
         p.guardian = vm.envAddress("GUARDIAN_ADDRESS");
@@ -84,7 +84,7 @@ contract Deploy is DeployBase {
         p.vaultFeeBps = vm.envOr("VAULT_FEE_BPS", uint256(5));
         p.buyFeeBps = vm.envOr("BUY_FEE_BPS", uint256(25));
         p.sellFeeBps = vm.envOr("SELL_FEE_BPS", uint256(30));
-        p.supplyCap = vm.envUint("SUPPLY_CAP"); // en BIETIX con 18 decimales
+        p.supplyCap = vm.envUint("SUPPLY_CAP"); // en DUOX con 18 decimales
         p.maxTradeUsd = vm.envOr("MAX_TRADE_USD", uint256(25_000)) * 1e18;
         p.sellLimitUsd = vm.envOr("SELL_LIMIT_USD", uint256(50_000)) * 1e18;
 

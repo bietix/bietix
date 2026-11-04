@@ -174,7 +174,7 @@ contract OracleGuardTest is Test {
     }
 
     function test_indexPrice() public view {
-        // 1 BIETIX = 0,0001 BTC ($8) + 0,003 ETH ($8,001)
+        // 1 DUOX = 0,0001 BTC ($8) + 0,003 ETH ($8,001)
         assertEq(guard.indexPriceUsd(10_000, 3e15), 16.001e18);
     }
 

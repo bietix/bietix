@@ -2,12 +2,12 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {BietixVault} from "../../src/BietixVault.sol";
+import {DuoxVault} from "../../src/DuoxVault.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 
 /// @notice Ejecuta secuencias aleatorias de operaciones sobre el vault para las pruebas de invariantes.
 contract VaultHandler is Test {
-    BietixVault public vault;
+    DuoxVault public vault;
     MockERC20 public wbtc;
     MockERC20 public weth;
     address public timelock;
@@ -24,7 +24,7 @@ contract VaultHandler is Test {
     /// se marca si alguna acuñación dejó el supply por encima del límite (no debería pasar nunca)
     bool public mintExceededCap;
 
-    constructor(BietixVault v, MockERC20 b, MockERC20 e, address tl, address sf, address gd) {
+    constructor(DuoxVault v, MockERC20 b, MockERC20 e, address tl, address sf, address gd) {
         vault = v;
         wbtc = b;
         weth = e;
