@@ -2,21 +2,22 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DuoxRouter} from "../../src/DuoxRouter.sol";
-import {DuoxVault} from "../../src/DuoxVault.sol";
+import {BietixRouter} from "../../src/BietixRouter.sol";
+import {BietixVault} from "../../src/BietixVault.sol";
 import {OracleGuard} from "../../src/OracleGuard.sol";
+import {noFeeds, noStables, noAddresses} from "../utils/Empty.sol";
 import {MockSwapTarget} from "../mocks/MockSwapTarget.sol";
 import {FeeOnTransferToken} from "../mocks/MockERC20.sol";
 import {SystemTestBase} from "../utils/SystemTestBase.sol";
 
 /// @notice Pruebas del Router (secciones 1.4, 3 y 5 de las especificaciones).
-contract DuoxRouterTest is SystemTestBase {
+contract BietixRouterTest is SystemTestBase {
     // ═══════════════════════════════ Compra ═══════════════════════════════
 
     function test_buy_happyPath() public {
         uint256 amountIn = 1_000e6;
         _fund(alice, address(usdc), amountIn);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, 10);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, 10);
 
         vm.prank(alice);
         uint256 shares = router.buy(address(usdc), amountIn, 1, steps, block.timestamp, alice);
@@ -36,12 +37,12 @@ contract DuoxRouterTest is SystemTestBase {
     function test_buy_toOtherReceiverAndRefundsDust() public {
         uint256 amountIn = 1_000e6;
         _fund(alice, address(usdc), amountIn);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, 0);
         vm.prank(alice);
         uint256 shares = router.buy(address(usdc), amountIn, 0, steps, block.timestamp, bob);
         assertEq(vault.balanceOf(bob), shares);
         assertEq(vault.balanceOf(alice), 0);
-        // el polvo de WBTC/WETH que no alcanzó para un DUOX entero vuelve a quien pagó
+        // el polvo de WBTC/WETH que no alcanzó para un BIETIX entero vuelve a quien pagó
         assertTrue(wbtc.balanceOf(alice) > 0 || weth.balanceOf(alice) > 0);
         _assertRouterClean();
     }
@@ -49,7 +50,7 @@ contract DuoxRouterTest is SystemTestBase {
     function test_buy_refundsUnspentStable() public {
         uint256 amountIn = 1_000e6;
         _fund(alice, address(usdc), amountIn);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, 0);
         // se usa un poco menos del neto en el swap de ETH
         uint256 lessIn = steps[1].amountIn - 1e6;
         steps[1] = _step(address(usdc), lessIn, address(weth), lessIn * 1e12 * 1e18 / guard.ethUsd());
@@ -70,11 +71,11 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_buy_revertsWhenPaused() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         vm.prank(guardian);
         router.pause();
         vm.prank(alice);
-        vm.expectRevert(DuoxRouter.IsPaused.selector);
+        vm.expectRevert(BietixRouter.IsPaused.selector);
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp, alice);
 
         vm.prank(safe);
@@ -82,29 +83,29 @@ contract DuoxRouterTest is SystemTestBase {
         vm.prank(guardian);
         router.pauseBuys();
         vm.prank(alice);
-        vm.expectRevert(DuoxRouter.IsPaused.selector);
+        vm.expectRevert(BietixRouter.IsPaused.selector);
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp, alice);
     }
 
     function test_buy_revertsOnBasicValidation() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         address dai = makeAddr("DAI");
         vm.startPrank(alice);
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.StableNotAllowed.selector, dai));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.StableNotAllowed.selector, dai));
         router.buy(dai, 1_000e6, 0, steps, block.timestamp, alice);
-        vm.expectRevert(DuoxRouter.Expired.selector);
+        vm.expectRevert(BietixRouter.Expired.selector);
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp - 1, alice);
-        vm.expectRevert(DuoxRouter.ZeroAmount.selector);
+        vm.expectRevert(BietixRouter.ZeroAmount.selector);
         router.buy(address(usdc), 0, 0, steps, block.timestamp, alice);
-        vm.expectRevert(DuoxRouter.ZeroAddress.selector);
+        vm.expectRevert(BietixRouter.ZeroAddress.selector);
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp, address(0));
         vm.stopPrank();
     }
 
     function test_buy_revertsOnMinShares() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         vm.prank(alice);
         vm.expectRevert();
         router.buy(address(usdc), 1_000e6, 1_000e18, steps, block.timestamp, alice);
@@ -112,7 +113,7 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_buy_revertsOnBadExecution() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 150); // 1,5% peor
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 150); // 1,5% peor
         vm.prank(alice);
         vm.expectRevert();
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp, alice);
@@ -120,16 +121,16 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_buy_revertsWhenTradeTooLarge() public {
         _fund(alice, address(usdc), 25_001e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 25_001e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 25_001e6, 0);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.TradeTooLarge.selector, 25_001e18, MAX_TRADE));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.TradeTooLarge.selector, 25_001e18, MAX_TRADE));
         router.buy(address(usdc), 25_001e6, 0, steps, block.timestamp, alice);
     }
 
     function test_buy_blockedWhenWrapperDepegged() public {
         _fund(alice, address(usdc), 1_000e6);
         wrapFeed.setAnswer(0.97e8);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         vm.prank(alice);
         vm.expectRevert(OracleGuard.WrapperDepegged.selector);
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp, alice);
@@ -137,7 +138,7 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_buy_blockedWhenStableDepegged() public {
         _fund(alice, address(usdt), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdt), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdt), 1_000e6, 0);
         usdtFeed.setAnswer(0.97e8);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OracleGuard.StablePriceTooLow.selector, address(usdt)));
@@ -146,7 +147,7 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_buy_blockedWhenSequencerDown() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         seqFeed.setAnswer(1);
         vm.prank(alice);
         vm.expectRevert(OracleGuard.SequencerDown.selector);
@@ -155,34 +156,34 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_buy_revertsOnInvalidSteps() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
 
         // destino fuera de la lista blanca
-        DuoxRouter.SwapStep[] memory bad = _copy(steps);
+        BietixRouter.SwapStep[] memory bad = _copy(steps);
         bad[0].target = attacker;
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.TargetNotAllowed.selector, attacker));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.TargetNotAllowed.selector, attacker));
         router.buy(address(usdc), 1_000e6, 0, bad, block.timestamp, alice);
 
         // token de entrada que no es la stable
         bad = _copy(steps);
         bad[0].tokenIn = address(wbtc);
         vm.prank(alice);
-        vm.expectRevert(DuoxRouter.InvalidStep.selector);
+        vm.expectRevert(BietixRouter.InvalidStep.selector);
         router.buy(address(usdc), 1_000e6, 0, bad, block.timestamp, alice);
 
         // gastar más del neto (después de comisión)
         bad = _copy(steps);
         bad[1].amountIn = steps[1].amountIn + 10e6;
         vm.prank(alice);
-        vm.expectRevert(DuoxRouter.InvalidStep.selector);
+        vm.expectRevert(BietixRouter.InvalidStep.selector);
         router.buy(address(usdc), 1_000e6, 0, bad, block.timestamp, alice);
 
         // monto cero
         bad = _copy(steps);
         bad[0].amountIn = 0;
         vm.prank(alice);
-        vm.expectRevert(DuoxRouter.InvalidStep.selector);
+        vm.expectRevert(BietixRouter.InvalidStep.selector);
         router.buy(address(usdc), 1_000e6, 0, bad, block.timestamp, alice);
     }
 
@@ -191,7 +192,7 @@ contract DuoxRouterTest is SystemTestBase {
     function test_sell_happyPath() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
         uint256 treasuryBefore = usdc.balanceOf(treasury);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 10);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 10);
 
         vm.startPrank(alice);
         vault.approve(address(router), shares);
@@ -210,8 +211,8 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_sell_partialSwapRefundsUnsold() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
-        DuoxRouter.SwapStep[] memory onlyBtc = new DuoxRouter.SwapStep[](1);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory onlyBtc = new BietixRouter.SwapStep[](1);
         onlyBtc[0] = steps[0];
         uint256 wethBefore = weth.balanceOf(alice);
         (, uint256 e) = vault.previewRedeem(shares);
@@ -227,14 +228,14 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_sell_revertsWhenPaused() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         vm.prank(alice);
         vault.approve(address(router), shares);
 
         vm.prank(guardian);
         router.pauseSells();
         vm.prank(alice);
-        vm.expectRevert(DuoxRouter.IsPaused.selector);
+        vm.expectRevert(BietixRouter.IsPaused.selector);
         router.sell(shares, address(usdc), 0, steps, block.timestamp, alice);
 
         vm.prank(safe);
@@ -242,7 +243,7 @@ contract DuoxRouterTest is SystemTestBase {
         vm.prank(guardian);
         router.pause();
         vm.prank(alice);
-        vm.expectRevert(DuoxRouter.IsPaused.selector);
+        vm.expectRevert(BietixRouter.IsPaused.selector);
         router.sell(shares, address(usdc), 0, steps, block.timestamp, alice);
     }
 
@@ -251,7 +252,7 @@ contract DuoxRouterTest is SystemTestBase {
         vm.prank(guardian);
         router.pauseBuys();
         wrapFeed.setAnswer(0.95e8);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         vm.startPrank(alice);
         vault.approve(address(router), shares);
         uint256 out = router.sell(shares, address(usdc), 0, steps, block.timestamp, alice);
@@ -261,17 +262,17 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_sell_revertsOnValidation() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         address dai = makeAddr("DAI");
         vm.startPrank(alice);
         vault.approve(address(router), shares);
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.StableNotAllowed.selector, dai));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.StableNotAllowed.selector, dai));
         router.sell(shares, dai, 0, steps, block.timestamp, alice);
-        vm.expectRevert(DuoxRouter.Expired.selector);
+        vm.expectRevert(BietixRouter.Expired.selector);
         router.sell(shares, address(usdc), 0, steps, block.timestamp - 1, alice);
-        vm.expectRevert(DuoxRouter.ZeroAmount.selector);
+        vm.expectRevert(BietixRouter.ZeroAmount.selector);
         router.sell(0, address(usdc), 0, steps, block.timestamp, alice);
-        vm.expectRevert(DuoxRouter.ZeroAddress.selector);
+        vm.expectRevert(BietixRouter.ZeroAddress.selector);
         router.sell(shares, address(usdc), 0, steps, block.timestamp, address(0));
         vm.expectRevert(); // mínimo imposible
         router.sell(shares, address(usdc), 1_000e6, steps, block.timestamp, alice);
@@ -280,7 +281,7 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_sell_revertsOnBadExecution() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 150);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 150);
         vm.startPrank(alice);
         vault.approve(address(router), shares);
         vm.expectRevert();
@@ -290,22 +291,22 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_sell_revertsOnStepUsingOtherToken() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         steps[0].tokenIn = address(usdc);
         vm.startPrank(alice);
         vault.approve(address(router), shares);
-        vm.expectRevert(DuoxRouter.InvalidStep.selector);
+        vm.expectRevert(BietixRouter.InvalidStep.selector);
         router.sell(shares, address(usdc), 0, steps, block.timestamp, alice);
         vm.stopPrank();
     }
 
     function test_sell_revertsWhenSellingMoreThanRedeemed() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         steps[1].amountIn += 1;
         vm.startPrank(alice);
         vault.approve(address(router), shares);
-        vm.expectRevert(DuoxRouter.InvalidStep.selector);
+        vm.expectRevert(BietixRouter.InvalidStep.selector);
         router.sell(shares, address(usdc), 0, steps, block.timestamp, alice);
         vm.stopPrank();
     }
@@ -318,7 +319,7 @@ contract DuoxRouterTest is SystemTestBase {
 
         _sellAll(alice, s1); // ~$997 vendidos: OK
 
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), s2, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), s2, 0);
         vm.startPrank(bob);
         vault.approve(address(router), s2);
         vm.expectRevert(); // superaría $1.500 en la ventana
@@ -347,7 +348,7 @@ contract DuoxRouterTest is SystemTestBase {
         uint256 s1 = _buy(alice, address(usdc), 20_000e6);
         uint256 s2 = _buy(alice, address(usdc), 20_000e6);
         uint256 total = s1 + s2;
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), total, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), total, 0);
         vm.startPrank(alice);
         vault.approve(address(router), total);
         vm.expectRevert(); // ~$39.800 > máximo de $25.000
@@ -359,7 +360,7 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_attack_targetStealsFunds() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         dex.setMode(MockSwapTarget.Mode.Steal);
         vm.prank(alice);
         vm.expectRevert(); // no llega WBTC/WETH → el control contra oráculo o el mínimo revierten
@@ -369,29 +370,29 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_attack_targetTakesMoreThanApproved() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         dex.setMode(MockSwapTarget.Mode.TakeMore);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.SwapFailed.selector, address(dex)));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.SwapFailed.selector, address(dex)));
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp, alice);
     }
 
     function test_attack_targetFails() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
         dex.setMode(MockSwapTarget.Mode.Fail);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.SwapFailed.selector, address(dex)));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.SwapFailed.selector, address(dex)));
         router.buy(address(usdc), 1_000e6, 0, steps, block.timestamp, alice);
     }
 
     function test_attack_reentrancyBlocked() public {
         _fund(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
-        DuoxRouter.SwapStep[] memory inner = new DuoxRouter.SwapStep[](0);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 0);
+        BietixRouter.SwapStep[] memory inner = new BietixRouter.SwapStep[](0);
         dex.setReenter(
             address(router),
-            abi.encodeCall(DuoxRouter.buy, (address(usdc), 1, 0, inner, block.timestamp, address(dex)))
+            abi.encodeCall(BietixRouter.buy, (address(usdc), 1, 0, inner, block.timestamp, address(dex)))
         );
         dex.setMode(MockSwapTarget.Mode.Reenter);
         vm.prank(alice);
@@ -404,10 +405,10 @@ contract DuoxRouterTest is SystemTestBase {
         address[4] memory forbidden = [address(vault), address(wbtc), address(weth), address(usdc)];
         vm.startPrank(timelock);
         for (uint256 i; i < forbidden.length; i++) {
-            vm.expectRevert(abi.encodeWithSelector(DuoxRouter.TargetNotAllowed.selector, forbidden[i]));
+            vm.expectRevert(abi.encodeWithSelector(BietixRouter.TargetNotAllowed.selector, forbidden[i]));
             router.addSwapTarget(forbidden[i]);
         }
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.TargetNotAllowed.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.TargetNotAllowed.selector, address(0)));
         router.addSwapTarget(address(0));
         vm.stopPrank();
     }
@@ -426,10 +427,10 @@ contract DuoxRouterTest is SystemTestBase {
         assertEq(usdc.balanceOf(treasury), 123e6 + 2.5e6);
     }
 
-    function test_attack_duoxDonationDoesNotBrickRouter() public {
+    function test_attack_tokenDonationDoesNotBrickRouter() public {
         uint256 s1 = _buy(bob, address(usdc), 100e6);
         vm.prank(bob);
-        assertTrue(vault.transfer(address(router), s1)); // alguien "dona" DUOX al Router
+        assertTrue(vault.transfer(address(router), s1)); // alguien "dona" BIETIX al Router
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
         _sellAll(alice, shares);
         assertEq(vault.balanceOf(address(router)), s1, "la donacion queda intacta y se puede rescatar");
@@ -437,7 +438,7 @@ contract DuoxRouterTest is SystemTestBase {
 
     function test_attack_sellWithoutApprovalFails() public {
         uint256 shares = _buy(alice, address(usdc), 1_000e6);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         vm.prank(attacker);
         vm.expectRevert();
         router.sell(shares, address(usdc), 0, steps, block.timestamp, attacker);
@@ -503,7 +504,7 @@ contract DuoxRouterTest is SystemTestBase {
         vm.expectRevert();
         router.addSwapTarget(x);
         vm.prank(timelock);
-        vm.expectRevert(DuoxRouter.ZeroAddress.selector);
+        vm.expectRevert(BietixRouter.ZeroAddress.selector);
         router.addStable(address(0));
 
         vm.prank(guardian);
@@ -520,12 +521,12 @@ contract DuoxRouterTest is SystemTestBase {
     function test_admin_limits() public {
         vm.startPrank(guardian);
         router.decreaseMaxTrade(10_000e18);
-        vm.expectRevert(DuoxRouter.NotLower.selector);
+        vm.expectRevert(BietixRouter.NotLower.selector);
         router.decreaseMaxTrade(20_000e18);
         vm.expectRevert();
         router.increaseMaxTrade(30_000e18);
         router.decreaseSellLimit(10_000e18);
-        vm.expectRevert(DuoxRouter.NotLower.selector);
+        vm.expectRevert(BietixRouter.NotLower.selector);
         router.decreaseSellLimit(20_000e18);
         vm.expectRevert();
         router.increaseSellLimit(30_000e18);
@@ -533,10 +534,10 @@ contract DuoxRouterTest is SystemTestBase {
 
         vm.startPrank(timelock);
         router.increaseMaxTrade(30_000e18);
-        vm.expectRevert(DuoxRouter.NotHigher.selector);
+        vm.expectRevert(BietixRouter.NotHigher.selector);
         router.increaseMaxTrade(30_000e18);
         router.increaseSellLimit(30_000e18);
-        vm.expectRevert(DuoxRouter.NotHigher.selector);
+        vm.expectRevert(BietixRouter.NotHigher.selector);
         router.increaseSellLimit(1);
         vm.stopPrank();
         assertEq(router.maxTradeUsd(), 30_000e18);
@@ -560,13 +561,13 @@ contract DuoxRouterTest is SystemTestBase {
         vm.startPrank(timelock);
         router.setBuyFee(100);
         router.setSellFee(0);
-        vm.expectRevert(DuoxRouter.FeeTooHigh.selector);
+        vm.expectRevert(BietixRouter.FeeTooHigh.selector);
         router.setBuyFee(101);
-        vm.expectRevert(DuoxRouter.FeeTooHigh.selector);
+        vm.expectRevert(BietixRouter.FeeTooHigh.selector);
         router.setSellFee(101);
-        vm.expectRevert(DuoxRouter.ZeroAddress.selector);
+        vm.expectRevert(BietixRouter.ZeroAddress.selector);
         router.setOracle(OracleGuard(address(0)));
-        vm.expectRevert(DuoxRouter.ZeroAddress.selector);
+        vm.expectRevert(BietixRouter.ZeroAddress.selector);
         router.setTreasury(address(0));
         router.setTreasury(bob);
         router.setOracle(guard);
@@ -595,7 +596,7 @@ contract DuoxRouterTest is SystemTestBase {
     }
 
     function test_constructor_validation() public {
-        DuoxRouter.Config memory c = DuoxRouter.Config({
+        BietixRouter.Config memory c = BietixRouter.Config({
             vault: vault,
             oracle: guard,
             admin: timelock,
@@ -606,29 +607,31 @@ contract DuoxRouterTest is SystemTestBase {
             buyFeeBps: 25,
             sellFeeBps: 30,
             maxTradeUsd: MAX_TRADE,
-            sellLimitUsd: SELL_LIMIT
+            sellLimitUsd: SELL_LIMIT,
+            stables: noAddresses(),
+            swapTargets: noAddresses()
         });
         c.treasury = address(0);
-        vm.expectRevert(DuoxRouter.ZeroAddress.selector);
-        new DuoxRouter(c);
+        vm.expectRevert(BietixRouter.ZeroAddress.selector);
+        new BietixRouter(c);
         c.treasury = treasury;
-        c.vault = DuoxVault(address(0));
+        c.vault = BietixVault(address(0));
         vm.expectRevert();
-        new DuoxRouter(c);
+        new BietixRouter(c);
         c.vault = vault;
         c.sellFeeBps = 101;
-        vm.expectRevert(DuoxRouter.FeeTooHigh.selector);
-        new DuoxRouter(c);
+        vm.expectRevert(BietixRouter.FeeTooHigh.selector);
+        new BietixRouter(c);
         c.sellFeeBps = 30;
         c.buyFeeBps = 101;
-        vm.expectRevert(DuoxRouter.FeeTooHigh.selector);
-        new DuoxRouter(c);
+        vm.expectRevert(BietixRouter.FeeTooHigh.selector);
+        new BietixRouter(c);
     }
 
     function test_sharesFor_view() public view {
         assertEq(router.sharesFor(0, 0), 0);
         assertEq(router.sharesFor(2, 1e18), 0, "con polvo de BTC no alcanza");
-        uint256 s = router.sharesFor(1e8, 30e18); // 1 BTC + 30 ETH = 10.000 DUOX antes de comision
+        uint256 s = router.sharesFor(1e8, 30e18); // 1 BTC + 30 ETH = 10.000 BIETIX antes de comision
         assertGt(s, 9_990e18);
         assertLt(s, 10_000e18);
         (uint256 b, uint256 e, uint256 fb, uint256 fe) = vault.previewMint(s);
@@ -645,8 +648,8 @@ contract DuoxRouterTest is SystemTestBase {
         fot.mint(alice, 1_000e8);
         vm.startPrank(alice);
         fot.approve(address(router), 1_000e8);
-        DuoxRouter.SwapStep[] memory none = new DuoxRouter.SwapStep[](0);
-        vm.expectRevert(abi.encodeWithSelector(DuoxRouter.BalanceMismatch.selector, address(fot)));
+        BietixRouter.SwapStep[] memory none = new BietixRouter.SwapStep[](0);
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.BalanceMismatch.selector, address(fot)));
         router.buy(address(fot), 1_000e8, 0, none, block.timestamp, alice);
         vm.stopPrank();
     }
@@ -686,12 +689,12 @@ contract DuoxRouterTest is SystemTestBase {
         lossBps = bound(lossBps, 0, 90);
         uint256 amountIn = amountUsd * 1e6;
         _fund(alice, address(usdc), amountIn);
-        DuoxRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, lossBps);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), amountIn, lossBps);
         vm.prank(alice);
         uint256 shares = router.buy(address(usdc), amountIn, 0, steps, block.timestamp, alice);
         _assertRouterClean();
 
-        // valor de los DUOX + polvo devuelto ≥ entrada − comisiones − slippage − 1 USD de redondeos
+        // valor de los BIETIX + polvo devuelto ≥ entrada − comisiones − slippage − 1 USD de redondeos
         uint256 worth = guard.indexPriceUsd(UNIT_BTC, UNIT_ETH) * shares / 1e18
             + guard.basketValueUsd(wbtc.balanceOf(alice), weth.balanceOf(alice));
         uint256 floor = amountUsd * 1e18 * (10_000 - BUY_FEE_BPS - VAULT_FEE_BPS - lossBps) / 10_000;
@@ -703,7 +706,7 @@ contract DuoxRouterTest is SystemTestBase {
         amountUsd = bound(amountUsd, 20, 25_000);
         uint256 amountIn = amountUsd * 1e6;
         uint256 shares = _buy(alice, address(usdc), amountIn);
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         vm.startPrank(alice);
         vault.approve(address(router), shares);
         uint256 out = router.sell(shares, address(usdc), 0, steps, block.timestamp, alice);
@@ -715,17 +718,21 @@ contract DuoxRouterTest is SystemTestBase {
     // ═══════════════════════════════ Ayudas ═══════════════════════════════
 
     function _sellAll(address user, uint256 shares) internal returns (uint256 out) {
-        DuoxRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), shares, 0);
         vm.startPrank(user);
         vault.approve(address(router), shares);
         out = router.sell(shares, address(usdc), 0, steps, block.timestamp, user);
         vm.stopPrank();
     }
 
-    function _copy(DuoxRouter.SwapStep[] memory a) internal pure returns (DuoxRouter.SwapStep[] memory b) {
-        b = new DuoxRouter.SwapStep[](a.length);
+    function _copy(BietixRouter.SwapStep[] memory a)
+        internal
+        pure
+        returns (BietixRouter.SwapStep[] memory b)
+    {
+        b = new BietixRouter.SwapStep[](a.length);
         for (uint256 i; i < a.length; i++) {
-            b[i] = DuoxRouter.SwapStep(a[i].target, a[i].tokenIn, a[i].amountIn, a[i].data);
+            b[i] = BietixRouter.SwapStep(a[i].target, a[i].tokenIn, a[i].amountIn, a[i].data);
         }
     }
 }

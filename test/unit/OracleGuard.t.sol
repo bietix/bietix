@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {OracleGuard} from "../../src/OracleGuard.sol";
+import {noFeeds, noStables, noAddresses} from "../utils/Empty.sol";
 import {AggregatorV3Interface} from "../../src/interfaces/AggregatorV3Interface.sol";
 import {MockAggregator} from "../mocks/MockAggregator.sol";
 
@@ -41,7 +42,17 @@ contract OracleGuardTest is Test {
         usdcUsd = new MockAggregator(8, 1e8);
         usdtUsd = new MockAggregator(8, 1e8);
 
-        guard = new OracleGuard(timelock, 2 days, safe, guardian, 8, 18, AggregatorV3Interface(address(seq)));
+        guard = new OracleGuard(
+            timelock,
+            2 days,
+            safe,
+            guardian,
+            8,
+            18,
+            AggregatorV3Interface(address(seq)),
+            noFeeds(),
+            noStables()
+        );
         BTC = guard.BTC_USD();
         ETH = guard.ETH_USD();
         WRAP = guard.WBTC_BTC();
@@ -163,7 +174,7 @@ contract OracleGuardTest is Test {
     }
 
     function test_indexPrice() public view {
-        // 1 DUOX = 0,0001 BTC ($8) + 0,003 ETH ($8,001)
+        // 1 BIETIX = 0,0001 BTC ($8) + 0,003 ETH ($8,001)
         assertEq(guard.indexPriceUsd(10_000, 3e15), 16.001e18);
     }
 
@@ -423,11 +434,33 @@ contract OracleGuardTest is Test {
 
     function test_constructor_zeroAddresses() public {
         vm.expectRevert(OracleGuard.ZeroAddress.selector);
-        new OracleGuard(timelock, 2 days, address(0), guardian, 8, 18, AggregatorV3Interface(address(seq)));
+        new OracleGuard(
+            timelock,
+            2 days,
+            address(0),
+            guardian,
+            8,
+            18,
+            AggregatorV3Interface(address(seq)),
+            noFeeds(),
+            noStables()
+        );
         vm.expectRevert(OracleGuard.ZeroAddress.selector);
-        new OracleGuard(timelock, 2 days, safe, address(0), 8, 18, AggregatorV3Interface(address(seq)));
+        new OracleGuard(
+            timelock,
+            2 days,
+            safe,
+            address(0),
+            8,
+            18,
+            AggregatorV3Interface(address(seq)),
+            noFeeds(),
+            noStables()
+        );
         vm.expectRevert(OracleGuard.ZeroAddress.selector);
-        new OracleGuard(timelock, 2 days, safe, guardian, 8, 18, AggregatorV3Interface(address(0)));
+        new OracleGuard(
+            timelock, 2 days, safe, guardian, 8, 18, AggregatorV3Interface(address(0)), noFeeds(), noStables()
+        );
     }
 
     function test_params_rejectWrongDirectionAndBounds() public {
