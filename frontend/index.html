@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bietix: Bitcoin y Ether en un solo token</title>
+  <meta name="description" content="Bietix es un token respaldado 1:1 por WBTC y WETH. Su precio es una fórmula: lo que valen sus BTC y ETH." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="#" aria-label="Bietix, inicio"><span class="wm-bi">bi</span><span class="wm-et">et</span>ix</a>
+    <div class="topbar-right">
+      <span class="net" id="net-pill" hidden></span>
+      <button class="btn btn-ghost" id="connect">Conectar billetera</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" role="status" hidden></div>
+
+  <main>
+    <!-- La fórmula: el corazón del producto -->
+    <section class="hero" aria-labelledby="formula-title">
+      <h1 id="formula-title" class="visually-hidden">Qué es un BIETIX</h1>
+      <p class="formula" aria-live="polite">
+        <span class="f-term f-token">1 BIETIX</span>
+        <span class="f-op">=</span>
+        <span class="f-term f-btc"><span id="unit-btc">0,0001</span> BTC</span>
+        <span class="f-op">+</span>
+        <span class="f-term f-eth"><span id="unit-eth">0,00339</span> ETH</span>
+        <span class="f-total"><span class="f-op">=</span> <span class="f-term f-usd" id="price-usd">$ —</span></span>
+      </p>
+      <p class="lede">Un solo token con Bitcoin y Ether adentro. Su precio no depende de la oferta y la demanda: es lo que valen los BTC y ETH que lo respaldan, y podés canjearlo por ellos cuando quieras.</p>
+
+      <figure class="mix" aria-label="Composición actual del respaldo">
+        <div class="mix-bar" role="img" id="mix-bar" aria-label="Composición">
+          <span class="mix-btc" id="mix-btc" style="width:50%"></span>
+          <span class="mix-eth" id="mix-eth" style="width:50%"></span>
+        </div>
+        <figcaption class="mix-legend">
+          <span><i class="dot dot-btc"></i>Bitcoin <b id="pct-btc">50%</b></span>
+          <span><i class="dot dot-eth"></i>Ether <b id="pct-eth">50%</b></span>
+          <span class="mix-note">La proporción cambia sola con los precios: nadie rebalancea.</span>
+        </figcaption>
+      </figure>
+    </section>
+
+    <div class="grid">
+      <!-- Panel de operación -->
+      <section class="trade" aria-labelledby="trade-title">
+        <h2 id="trade-title" class="visually-hidden">Operar</h2>
+        <div class="tabs" role="tablist" aria-label="Tipo de operación">
+          <button role="tab" class="tab" id="tab-buy" aria-selected="true" aria-controls="panel-buy">Comprar</button>
+          <button role="tab" class="tab" id="tab-sell" aria-selected="false" aria-controls="panel-sell" tabindex="-1">Vender</button>
+          <button role="tab" class="tab" id="tab-exit" aria-selected="false" aria-controls="panel-exit" tabindex="-1">Canjear</button>
+        </div>
+
+        <!-- Comprar -->
+        <form class="panel" id="panel-buy" role="tabpanel" aria-labelledby="tab-buy">
+          <label class="field">
+            <span class="field-label">Pagás</span>
+            <span class="field-row">
+              <input type="text" inputmode="decimal" autocomplete="off" id="buy-amount" placeholder="0" aria-describedby="buy-balance" />
+              <select id="buy-stable" aria-label="Moneda de pago">
+                <option value="USDC">USDC</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </span>
+            <span class="field-hint"><span id="buy-balance">Saldo: —</span> <button type="button" class="link" id="buy-max">Usar todo</button></span>
+          </label>
+          <div class="receive">
+            <span class="field-label">Recibís aproximadamente</span>
+            <span class="receive-amount"><span id="buy-out">0</span> BIETIX</span>
+            <span class="receive-usd" id="buy-out-usd"></span>
+          </div>
+          <dl class="breakdown" id="buy-breakdown">
+            <div><dt>Comisión (0,30%)</dt><dd id="buy-fee">—</dd></div>
+            <div><dt>Mínimo garantizado</dt><dd id="buy-min">—</dd></div>
+          </dl>
+          <button class="btn btn-primary" type="submit" id="buy-btn" disabled>Conectá tu billetera</button>
+        </form>
+
+        <!-- Vender -->
+        <form class="panel" id="panel-sell" role="tabpanel" aria-labelledby="tab-sell" hidden>
+          <label class="field">
+            <span class="field-label">Vendés</span>
+            <span class="field-row">
+              <input type="text" inputmode="decimal" autocomplete="off" id="sell-amount" placeholder="0" aria-describedby="sell-balance" />
+              <span class="unit">BIETIX</span>
+            </span>
+            <span class="field-hint"><span id="sell-balance">Saldo: —</span> <button type="button" class="link" id="sell-max">Usar todo</button></span>
+          </label>
+          <label class="field field-inline">
+            <span class="field-label">Recibís en</span>
+            <select id="sell-stable" aria-label="Moneda que recibís">
+              <option value="USDC">USDC</option>
+              <option value="USDT">USDT</option>
+            </select>
+          </label>
+          <div class="receive">
+            <span class="field-label">Recibís aproximadamente</span>
+            <span class="receive-amount"><span id="sell-out">0</span> <span id="sell-out-unit">USDC</span></span>
+          </div>
+          <dl class="breakdown">
+            <div><dt>Comisión (0,30%)</dt><dd id="sell-fee">—</dd></div>
+            <div><dt>Mínimo garantizado</dt><dd id="sell-min">—</dd></div>
+          </dl>
+          <button class="btn btn-primary" type="submit" id="sell-btn" disabled>Conectá tu billetera</button>
+        </form>
+
+        <!-- Canje directo -->
+        <form class="panel" id="panel-exit" role="tabpanel" aria-labelledby="tab-exit" hidden>
+          <p class="panel-intro">Devolvés tus BIETIX y recibís el WBTC y WETH que los respaldan, directo del contrato. Sin comisión, sin intermediarios y disponible siempre, incluso si todo lo demás está pausado.</p>
+          <label class="field">
+            <span class="field-label">Canjeás</span>
+            <span class="field-row">
+              <input type="text" inputmode="decimal" autocomplete="off" id="exit-amount" placeholder="0" aria-describedby="exit-balance" />
+              <span class="unit">BIETIX</span>
+            </span>
+            <span class="field-hint"><span id="exit-balance">Saldo: —</span> <button type="button" class="link" id="exit-max">Usar todo</button></span>
+          </label>
+          <dl class="breakdown">
+            <div><dt><i class="dot dot-btc"></i>WBTC</dt><dd id="exit-btc">—</dd></div>
+            <div><dt><i class="dot dot-eth"></i>WETH</dt><dd id="exit-eth">—</dd></div>
+          </dl>
+          <button class="btn btn-primary" type="submit" id="exit-btn" disabled>Conectá tu billetera</button>
+        </form>
+
+        <p class="tx-status" id="tx-status" role="status" aria-live="polite"></p>
+
+        <details class="settings">
+          <summary>Tolerancia de precio: <span id="slip-label">1%</span></summary>
+          <p>Si el precio de ejecución resulta peor que esto, la operación se cancela y no perdés nada.</p>
+          <div class="slip-options" role="radiogroup" aria-label="Tolerancia de precio">
+            <button type="button" class="chip" data-slip="50" role="radio" aria-checked="false">0,5%</button>
+            <button type="button" class="chip" data-slip="100" role="radio" aria-checked="true">1%</button>
+            <button type="button" class="chip" data-slip="200" role="radio" aria-checked="false">2%</button>
+          </div>
+        </details>
+      </section>
+
+      <!-- Respaldo verificable -->
+      <section class="backing" aria-labelledby="backing-title">
+        <h2 id="backing-title">Respaldo en el contrato</h2>
+        <p class="muted">Datos leídos de la cadena en este momento. Cualquiera puede verificarlos.</p>
+        <table class="ledger">
+          <thead>
+            <tr><th scope="col"></th><th scope="col">En el vault</th><th scope="col">Necesario</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row"><i class="dot dot-btc"></i>WBTC</th><td id="vault-btc">—</td><td id="need-btc">—</td></tr>
+            <tr><th scope="row"><i class="dot dot-eth"></i>WETH</th><td id="vault-eth">—</td><td id="need-eth">—</td></tr>
+          </tbody>
+        </table>
+        <p class="backing-verdict" id="backing-verdict">Leyendo el contrato…</p>
+        <dl class="facts">
+          <div><dt>BIETIX en circulación</dt><dd id="supply">—</dd></div>
+          <div><dt>Valor total respaldado</dt><dd id="tvl">—</dd></div>
+        </dl>
+        <a class="link" id="vault-link" target="_blank" rel="noopener">Ver el contrato en Arbiscan</a>
+
+        <div class="faucet" id="faucet" hidden>
+          <h3>Tokens de prueba</h3>
+          <p class="muted">Esta es una red de prueba: los tokens no tienen valor. Pedí una vez por hora.</p>
+          <div class="faucet-buttons">
+            <button type="button" class="btn btn-ghost" data-faucet="USDC">10.000 USDC</button>
+            <button type="button" class="btn btn-ghost" data-faucet="USDT">10.000 USDT</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="costs" aria-labelledby="costs-title">
+      <h2 id="costs-title">Lo que cuesta</h2>
+      <div class="costs-grid">
+        <div><p class="cost-num">0,30%</p><p>al comprar con USDC o USDT</p></div>
+        <div><p class="cost-num">0,30%</p><p>al vender por USDC o USDT</p></div>
+        <div><p class="cost-num">0%</p><p>al canjear por BTC y ETH</p></div>
+        <div><p class="cost-num">0%</p><p>por tenerlo: no hay comisión anual</p></div>
+      </div>
+      <p class="muted">A eso se suma el costo de mercado de los swaps (alrededor de 0,1% por lado) y el gas de la red, que en Arbitrum es de centavos.</p>
+    </section>
+
+    <section class="how" aria-labelledby="how-title">
+      <h2 id="how-title">Qué pasa cuando comprás</h2>
+      <ol class="steps">
+        <li><b>Entregás dólares digitales.</b> USDC o USDT, desde tu billetera.</li>
+        <li><b>El contrato compra BTC y ETH.</b> En la proporción exacta del índice, al precio de mercado.</li>
+        <li><b>Se crean tus BIETIX.</b> Respaldados por esos BTC y ETH, que quedan guardados en el vault.</li>
+      </ol>
+      <p class="muted">Si el precio de los swaps se aleja más de 1% del de los oráculos de Chainlink, la operación se cancela sola.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p id="footer-net">Red: Arbitrum Sepolia (prueba). Los tokens de esta red no tienen valor.</p>
+    <p>Contratos: <span id="footer-contracts"></span></p>
+    <p class="muted">Bietix no es una recomendación de inversión. Los contratos todavía no fueron auditados por terceros.</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

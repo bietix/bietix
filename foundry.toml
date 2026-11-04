@@ -39,3 +39,11 @@ line_length = 110
 exclude_lints = ["block-timestamp"]
 # El linter se aplica al código de los contratos (src/). Las pruebas usan patrones propios de testing.
 ignore = ["test/**/*.sol"]
+
+[rpc_endpoints]
+arbitrum = "${ARBITRUM_RPC_URL}"
+arbitrum_sepolia = "${ARBITRUM_SEPOLIA_RPC_URL}"
+
+[etherscan]
+arbitrum = { key = "${ETHERSCAN_API_KEY}", chain = 42161 }
+arbitrum_sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 421614 }

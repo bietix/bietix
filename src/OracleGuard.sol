@@ -7,10 +7,10 @@ import {
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 
-/// @title OracleGuard — red de seguridad de precios para el Router de DUOX
+/// @title OracleGuard — red de seguridad de precios para el Router de BIETIX
 /// @notice Lee Chainlink (BTC/USD, ETH/USD, WBTC/BTC, stablecoins y Sequencer Uptime de Arbitrum) y
 ///         revierte si algún dato es inválido o si un swap rindió peor que el oráculo más allá del margen.
-/// @dev El núcleo (DuoxVault) NO usa este contrato. Si falla, solo se detiene el Router y la salida
+/// @dev El núcleo (BietixVault) NO usa este contrato. Si falla, solo se detiene el Router y la salida
 ///      In-Kind sigue abierta. Ver Especificaciones Técnicas, sección 4.
 ///      Regla de permisos: endurecer = guardián (inmediato); relajar = administrador/Timelock (con espera).
 contract OracleGuard is AccessControlDefaultAdminRules {
@@ -31,6 +31,25 @@ contract OracleGuard is AccessControlDefaultAdminRules {
     uint256 public constant MIN_GRACE_PERIOD = 30 minutes;
     uint256 public constant MIN_WRAPPER_THRESHOLD = 0.95e18;
     uint256 public constant MIN_STABLE_PRICE_FLOOR = 0.95e18;
+
+    /// @notice Feed a configurar en el despliegue.
+    struct FeedInit {
+        bytes32 key;
+        AggregatorV3Interface feed;
+        uint32 maxStaleness;
+        uint96 minPrice;
+        uint96 maxPrice;
+    }
+
+    /// @notice Stablecoin a configurar en el despliegue.
+    struct StableInit {
+        address token;
+        uint8 decimals;
+        AggregatorV3Interface feed;
+        uint32 maxStaleness;
+        uint96 minPrice;
+        uint96 maxPrice;
+    }
 
     struct FeedConfig {
         AggregatorV3Interface feed;
@@ -86,7 +105,9 @@ contract OracleGuard is AccessControlDefaultAdminRules {
         address guardian,
         uint8 btcDecimals,
         uint8 ethDecimals,
-        AggregatorV3Interface sequencerFeed_
+        AggregatorV3Interface sequencerFeed_,
+        FeedInit[] memory initFeeds,
+        StableInit[] memory initStables
     ) AccessControlDefaultAdminRules(adminTransferDelay, admin) {
         if (safe == address(0) || guardian == address(0) || address(sequencerFeed_) == address(0)) {
             revert ZeroAddress();
@@ -104,6 +125,16 @@ contract OracleGuard is AccessControlDefaultAdminRules {
         _grantRole(SAFE_ROLE, safe);
         _grantRole(GUARDIAN_ROLE, safe);
         _grantRole(GUARDIAN_ROLE, guardian);
+
+        // Configuración inicial en el mismo despliegue: así quien despliega nunca necesita permisos.
+        for (uint256 i; i < initFeeds.length; i++) {
+            FeedInit memory f = initFeeds[i];
+            _setFeed(f.key, f.feed, f.maxStaleness, f.minPrice, f.maxPrice);
+        }
+        for (uint256 i; i < initStables.length; i++) {
+            StableInit memory st = initStables[i];
+            _setStable(st.token, st.decimals, st.feed, st.maxStaleness, st.minPrice, st.maxPrice);
+        }
     }
 
     /// @notice El Safe quita el rol a un guardián al instante (llave filtrada). Nombrar uno nuevo: Timelock.
@@ -259,12 +290,26 @@ contract OracleGuard is AccessControlDefaultAdminRules {
         uint96 minPrice,
         uint96 maxPrice
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setStable(token, tokenDecimals, feed, maxStaleness, minPrice, maxPrice);
+    }
+
+    // Se usa también desde el constructor (bucle de configuración inicial): avisos de bucle esperados.
+    // forge-lint: disable-start(require-revert-in-loop)
+    function _setStable(
+        address token,
+        uint8 tokenDecimals,
+        AggregatorV3Interface feed,
+        uint32 maxStaleness,
+        uint96 minPrice,
+        uint96 maxPrice
+    ) internal {
         if (token == address(0)) revert ZeroAddress();
         if (tokenDecimals == 0) revert InvalidFeed();
         stableDecimals[token] = tokenDecimals;
         _setFeed(stableKey(token), feed, maxStaleness, minPrice, maxPrice);
         emit StableSet(token, tokenDecimals);
     }
+    // forge-lint: disable-end(require-revert-in-loop)
 
     function setSequencerFeed(AggregatorV3Interface feed) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (address(feed) == address(0)) revert ZeroAddress();
@@ -272,6 +317,9 @@ contract OracleGuard is AccessControlDefaultAdminRules {
         emit SequencerFeedSet(address(feed));
     }
 
+    // Se usa también desde el constructor (bucle de configuración inicial): avisos de bucle esperados.
+    // forge-lint: disable-start(calls-loop, require-revert-in-loop)
+    // slither-disable-start calls-loop
     function _setFeed(
         bytes32 key,
         AggregatorV3Interface feed,
@@ -294,6 +342,8 @@ contract OracleGuard is AccessControlDefaultAdminRules {
         _feeds[key] = FeedConfig(feed, maxStaleness, dec, minPrice, maxPrice);
         emit FeedSet(key, address(feed), maxStaleness, minPrice, maxPrice);
     }
+    // slither-disable-end calls-loop
+    // forge-lint: disable-end(calls-loop, require-revert-in-loop)
 
     // ═══════════════ Parámetros: endurecer (guardián) / relajar (Timelock) ═══════════════
 

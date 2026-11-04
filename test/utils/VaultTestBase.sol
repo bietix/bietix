@@ -3,12 +3,12 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {DuoxVault} from "../../src/DuoxVault.sol";
+import {BietixVault} from "../../src/BietixVault.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 
 /// @notice Despliegue común para todas las pruebas del vault.
 abstract contract VaultTestBase is Test {
-    // Definición del índice usada en las pruebas: 1 DUOX = 0,0001 BTC + 0,003 ETH
+    // Definición del índice usada en las pruebas: 1 BIETIX = 0,0001 BTC + 0,003 ETH
     uint256 internal constant UNIT_BTC = 10_000; // sats (8 decimales)
     uint256 internal constant UNIT_ETH = 3e15; // wei (18 decimales)
     uint256 internal constant FEE_BPS = 5; // 0,05%
@@ -25,16 +25,16 @@ abstract contract VaultTestBase is Test {
 
     MockERC20 internal wbtc;
     MockERC20 internal weth;
-    DuoxVault internal vault;
+    BietixVault internal vault;
 
     function setUp() public virtual {
         wbtc = new MockERC20("Wrapped BTC", "WBTC", 8);
         weth = new MockERC20("Wrapped Ether", "WETH", 18);
-        vault = new DuoxVault("DUOX Index", "DUOX", _config(IERC20(address(wbtc)), IERC20(address(weth))));
+        vault = new BietixVault("Bietix", "BIETIX", _config(IERC20(address(wbtc)), IERC20(address(weth))));
     }
 
-    function _config(IERC20 b, IERC20 e) internal view returns (DuoxVault.Config memory c) {
-        c = DuoxVault.Config({
+    function _config(IERC20 b, IERC20 e) internal view returns (BietixVault.Config memory c) {
+        c = BietixVault.Config({
             assetBtc: b,
             assetEth: e,
             unitBtc: UNIT_BTC,

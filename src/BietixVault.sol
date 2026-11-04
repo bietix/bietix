@@ -11,7 +11,7 @@ import {
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-/// @title DuoxVault — núcleo del índice DUOX
+/// @title BietixVault — núcleo del índice BIETIX
 /// @notice Token ERC-20 y custodia en un solo contrato. Cada token (1e18 unidades mínimas)
 ///         representa siempre exactamente UNIT_BTC del activo BTC y UNIT_ETH del activo ETH.
 /// @dev Diseño (ver Especificaciones Técnicas, secciones 1.3, 1.7 y 2.3):
@@ -20,7 +20,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 ///      - La redención In-Kind no se puede pausar ni bloquear por ningún rol.
 ///      - Ningún rol puede mover ASSET_BTC ni ASSET_ETH fuera del vault.
 ///      - Redondeo siempre a favor del vault: acuñar cobra hacia arriba, redimir paga hacia abajo.
-contract DuoxVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, ReentrancyGuard {
+contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ─────────────────────────────── Roles ───────────────────────────────

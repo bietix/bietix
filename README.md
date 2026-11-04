@@ -1,28 +1,35 @@
-# DUOX — Índice BTC/ETH en Arbitrum
+# BIETIX — Índice BTC/ETH en Arbitrum
 
-Token ERC-20 donde **1 DUOX = 0,0001 WBTC + 0,003 WETH** (valores de prueba; los definitivos se fijan al lanzar).
+Token ERC-20 donde **1 BIETIX = 0,0001 WBTC + 0,003 WETH** (valores de prueba; los definitivos se fijan al lanzar).
 El precio del token es una fórmula de BTC y ETH, respaldada 1:1 por los activos reales que guarda el contrato.
 
-> Estado: **Paso 4 de la hoja de ruta** — los tres contratos (`DuoxVault`, `OracleGuard`, `DuoxRouter`) programados y probados. Próximo: pruebas sobre fork de Arbitrum One.
+> Estado: **Paso 6 de la hoja de ruta** — contratos, pruebas (incluido fork de Arbitrum One) y scripts de despliegue listos. Próximo: interfaz web mínima y despliegue en Arbitrum Sepolia. Ver **DEPLOY.md**.
 
 ## Qué hay en este repositorio
 
 ```
 src/
-  DuoxVault.sol                 Núcleo: token + custodia. Inmutable, sin oráculo, sin swaps.
+  BietixVault.sol                 Núcleo: token + custodia. Inmutable, sin oráculo, sin swaps.
   OracleGuard.sol               Red de seguridad de precios (Chainlink + sequencer de Arbitrum) para el Router.
-  DuoxRouter.sol                Compra/venta con USDC/USDT vía agregadores en lista blanca. Reemplazable, sin fondos.
+  BietixRouter.sol                Compra/venta con USDC/USDT vía agregadores en lista blanca. Reemplazable, sin fondos.
   interfaces/                   Interfaz de los feeds de Chainlink.
 test/
-  unit/DuoxVault.t.sol          39 pruebas unitarias (funciones, errores, permisos, ataques)
+  unit/BietixVault.t.sol          39 pruebas unitarias (funciones, errores, permisos, ataques)
   unit/OracleGuard.t.sol        41 pruebas: precios inválidos, desactualizados, sequencer, depegs, márgenes, permisos
-  unit/DuoxRouter.t.sol         44 pruebas: compra, venta, límites, pausas, ataques (agregador malicioso,
+  unit/BietixRouter.t.sol         44 pruebas: compra, venta, límites, pausas, ataques (agregador malicioso,
                                 reentrada, donaciones), emergencias, permisos y 2 fuzz
-  fuzz/DuoxVault.fuzz.t.sol     6 pruebas con valores aleatorios (1.000 casos cada una)
+  fuzz/BietixVault.fuzz.t.sol     6 pruebas con valores aleatorios (1.000 casos cada una)
   invariant/                    6 invariantes con secuencias aleatorias (25.600 llamadas cada una)
   mocks/                        Tokens falsos: normal, con comisión de transferencia, reentrante
   utils/VaultTestBase.sol       Despliegue común para las pruebas
 .github/workflows/test.yml      Integración continua (GitHub Actions)
+script/
+  DeployBase.sol                Lógica común: Timelock + OracleGuard + Vault + Router y verificación de permisos
+  Deploy.s.sol                  Despliegue en Arbitrum One (lee todo del .env)
+  DeployTestnet.s.sol           Despliegue en Arbitrum Sepolia con tokens, oráculos y DEX de prueba
+  testnet/TestnetMocks.sol      Contratos SOLO de testnet (faucet, feeds controlables, DEX de prueba)
+test/fork/                      Pruebas contra Arbitrum One real (necesitan ARBITRUM_RPC_URL en .env)
+test/script/                    Pruebas de los scripts de despliegue y del gobierno (Safe/Timelock/guardián)
 ```
 
 ## Herramientas necesarias
@@ -49,7 +56,7 @@ En Windows conviene usar **WSL** (Ubuntu dentro de Windows) para Foundry.
 ## Cómo correr las pruebas
 
 ```bash
-git clone <tu-repo> duox && cd duox
+git clone https://github.com/juanigna2012/duox bietix && cd bietix
 git submodule update --init --recursive   # descarga OpenZeppelin y forge-std
 forge build                               # compilar
 forge test                                # todas las pruebas (~20 s)
@@ -65,7 +72,7 @@ y alcanza con `forge build && forge test`.
 ## Resultados actuales
 
 - **131 pruebas pasan** (124 unitarias y fuzz + 6 invariantes del vault; tu versión de Foundry agrupa las invariantes en una sola línea).
-- **Cobertura:** `DuoxVault` 100% líneas · `OracleGuard` 98,8% líneas, 100% ramas · `DuoxRouter` 100% líneas. Las ramas no cubiertas del Router son controles defensivos que no se pueden alcanzar con tokens estándar (por ejemplo, "el agregador tomó más de lo aprobado").
+- **Cobertura:** `BietixVault` 100% líneas · `OracleGuard` 98,8% líneas, 100% ramas · `BietixRouter` 100% líneas. Las ramas no cubiertas del Router son controles defensivos que no se pueden alcanzar con tokens estándar (por ejemplo, "el agregador tomó más de lo aprobado").
 - **Slither:** 0 hallazgos. **Linter de Foundry:** 0 avisos (los falsos positivos están documentados línea por línea en el código).
 
 ### Invariantes que se verifican
@@ -87,10 +94,11 @@ Para el Router, I4 (no retiene fondos) e I5 (no deja aprobaciones abiertas) se v
 - **Wrapper:** se pasa en el despliegue (recomendado WBTC). El código no depende de cuál sea.
 - **Comisión In-Kind de acuñación:** 0,05% en las pruebas, ajustable por el Timelock hasta un techo fijo de 1%. Se cobra en los activos y va directo a tesorería.
 - **Redención In-Kind:** sin comisión, sin mínimo y **no pausable**. La salida siempre está abierta.
-- **Mínimo de acuñación:** 0,01 DUOX.
+- **Mínimo de acuñación:** 0,01 BIETIX.
 - **Comisiones de compra:** Router 0,25% + In-Kind del vault 0,05% = **0,30% total**. Venta: 0,30%.
 - **Roles:** Timelock = administrador (cambios que suben riesgo) · Safe = despausar, revocar guardián, rescatar tokens ajenos · Guardián = pausar y bajar el límite. Nadie puede mover el colateral.
 
 ## Próximos pasos
 
-5. Pruebas sobre fork de Arbitrum One (necesita un RPC).
+7. Interfaz web mínima (comprar, vender, In-Kind, precio del índice, respaldo).
+8. Despliegue en Arbitrum Sepolia y simulacros (ver DEPLOY.md).
