@@ -89,8 +89,8 @@ main { padding: 0 clamp(16px, 4vw, 56px); max-width: 1240px; margin: 0 auto; }
   display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--line);
 }
 .mix-bar span { display: block; height: 100%; transition: width 600ms cubic-bezier(.2,.7,.2,1); }
-.mix-btc { background: var(--btc); }
-.mix-eth { background: var(--eth); }
+.mix-btc { background: var(--btc); width: 50%; }
+.mix-eth { background: var(--eth); width: 50%; }
 .mix-legend {
   display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 10px; font-size: var(--step--1); color: var(--ink-2);
 }
