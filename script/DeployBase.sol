@@ -7,6 +7,8 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 import {BietixVault} from "../src/BietixVault.sol";
 import {OracleGuard} from "../src/OracleGuard.sol";
 import {BietixRouter} from "../src/BietixRouter.sol";
+import {GuardianCanceller} from "../src/GuardianCanceller.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {AggregatorV3Interface} from "../src/interfaces/AggregatorV3Interface.sol";
 
 /// @title Lógica común de despliegue de BIETIX (mainnet y testnet)
@@ -24,6 +26,7 @@ abstract contract DeployBase is Script {
         address treasury; // recibe las comisiones
         uint256 timelockDelay; // espera del Timelock (segundos)
         uint48 adminTransferDelay; // espera para transferir el rol de administrador
+        uint256 guardianChangeDelay; // espera para que el Safe reemplace o quite al guardián del Timelock
         // Activos
         address wbtc;
         address weth;
@@ -54,6 +57,7 @@ abstract contract DeployBase is Script {
 
     struct Deployment {
         TimelockController timelock;
+        GuardianCanceller canceller;
         OracleGuard oracle;
         BietixVault vault;
         BietixRouter router;
@@ -66,24 +70,30 @@ abstract contract DeployBase is Script {
     function _deploy(Params memory p, address deployer) internal returns (Deployment memory d) {
         _validateParams(p, deployer);
 
-        // 1. Timelock: el Safe propone y ejecuta; el guardián puede cancelar. Nadie más.
+        // 1. Timelock: el Safe propone y ejecuta; el guardián puede cancelar a través de GuardianCanceller
+        //    (así el Safe puede quitarle ese poder sin que el guardián lo vete). Nadie más.
         address[] memory proposers = new address[](1);
         proposers[0] = p.safe;
         address[] memory executors = new address[](1);
         executors[0] = p.safe;
         d.timelock = new TimelockController(p.timelockDelay, proposers, executors, deployer);
-        d.timelock.grantRole(d.timelock.CANCELLER_ROLE(), p.guardian);
+        d.canceller = new GuardianCanceller(d.timelock, p.safe, p.guardian, p.guardianChangeDelay);
+        d.timelock.grantRole(d.timelock.CANCELLER_ROLE(), address(d.canceller));
         // Quien despliega renuncia de inmediato a la administración del Timelock.
         d.timelock.renounceRole(d.timelock.DEFAULT_ADMIN_ROLE(), deployer);
 
-        // 2. OracleGuard con todos los feeds configurados desde el constructor
+        // 2. OracleGuard con todos los feeds configurados desde el constructor.
+        //    Los decimales de los activos se leen del propio token (WBTC = 8, WETH = 18).
+        uint8 btcDec = IERC20Metadata(p.wbtc).decimals();
+        uint8 ethDec = IERC20Metadata(p.weth).decimals();
+        _check(btcDec == 8 && ethDec == 18, "decimales de WBTC/WETH");
         d.oracle = new OracleGuard(
             address(d.timelock),
             p.adminTransferDelay,
             p.safe,
             p.guardian,
-            8,
-            18,
+            btcDec,
+            ethDec,
             AggregatorV3Interface(p.seqFeed),
             _feedInits(p),
             _stableInits(p)
@@ -144,7 +154,14 @@ abstract contract DeployBase is Script {
         _check(t.hasRole(t.PROPOSER_ROLE(), p.safe), "safe proponente");
         _check(t.hasRole(t.EXECUTOR_ROLE(), p.safe), "safe ejecutor");
         _check(t.hasRole(t.CANCELLER_ROLE(), p.safe), "safe cancelador");
-        _check(t.hasRole(t.CANCELLER_ROLE(), p.guardian), "guardian cancelador");
+        _check(!t.hasRole(t.CANCELLER_ROLE(), p.guardian), "guardian cancelador directo");
+        GuardianCanceller c = d.canceller;
+        _check(t.hasRole(t.CANCELLER_ROLE(), address(c)), "canceller cancelador");
+        _check(
+            address(c.TIMELOCK()) == address(t) && c.SAFE() == p.safe && c.guardian() == p.guardian
+                && c.CHANGE_DELAY() == p.guardianChangeDelay,
+            "configuracion del canceller"
+        );
         _check(!t.hasRole(t.DEFAULT_ADMIN_ROLE(), deployer), "deployer sigue admin del timelock");
         _check(!t.hasRole(t.PROPOSER_ROLE(), deployer), "deployer proponente");
         _check(!t.hasRole(t.EXECUTOR_ROLE(), deployer), "deployer ejecutor");
@@ -175,7 +192,9 @@ abstract contract DeployBase is Script {
             "deployer en oraculo"
         );
         _check(
-            o.hasRole(o.SAFE_ROLE(), p.safe) && o.hasRole(o.GUARDIAN_ROLE(), p.guardian), "roles del oraculo"
+            o.hasRole(o.SAFE_ROLE(), p.safe) && o.hasRole(o.GUARDIAN_ROLE(), p.safe)
+                && o.hasRole(o.GUARDIAN_ROLE(), p.guardian),
+            "roles del oraculo"
         );
         _check(o.indexPriceUsd(v.UNIT_BTC(), v.UNIT_ETH()) > 0, "precio del indice");
         for (uint256 i; i < p.stables.length; i++) {
@@ -190,7 +209,8 @@ abstract contract DeployBase is Script {
             "deployer en router"
         );
         _check(
-            r.hasRole(r.UNPAUSER_ROLE(), p.safe) && r.hasRole(r.GUARDIAN_ROLE(), p.guardian),
+            r.hasRole(r.UNPAUSER_ROLE(), p.safe) && r.hasRole(r.GUARDIAN_ROLE(), p.safe)
+                && r.hasRole(r.GUARDIAN_ROLE(), p.guardian),
             "roles del router"
         );
         _check(address(r.VAULT()) == address(v) && address(r.oracle()) == address(o), "conexiones del router");
@@ -207,6 +227,7 @@ abstract contract DeployBase is Script {
         console2.log("==================== BIETIX desplegado ====================");
         console2.log("Red (chainid):     ", block.chainid);
         console2.log("TimelockController:", address(d.timelock));
+        console2.log("GuardianCanceller: ", address(d.canceller));
         console2.log("OracleGuard:       ", address(d.oracle));
         console2.log("BietixVault (BIETIX):  ", address(d.vault));
         console2.log("BietixRouter:        ", address(d.router));
@@ -227,6 +248,9 @@ abstract contract DeployBase is Script {
         );
         _check(p.safe != deployer && p.guardian != deployer, "safe/guardian no pueden ser quien despliega");
         _check(p.safe != p.guardian, "safe y guardian deben ser distintos");
+        _check(
+            p.guardianChangeDelay >= p.timelockDelay, "espera de cambio de guardian menor que la del timelock"
+        );
         _check(
             p.stables.length == p.stableDecimals.length && p.stables.length == p.stableFeeds.length, "stables"
         );

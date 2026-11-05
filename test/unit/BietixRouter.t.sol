@@ -206,7 +206,7 @@ contract BietixRouterTest is SystemTestBase {
         assertGt(out, 990e6);
         assertLt(out, 1_000e6);
         _assertRouterClean();
-        assertGt(router.soldInWindowUsd(), 0);
+        assertGt(router.sellUsedUsd(), 0);
     }
 
     function test_sell_partialSwapRefundsUnsold() public {
@@ -677,8 +677,79 @@ contract BietixRouterTest is SystemTestBase {
         wrapFeed.setAnswer(1e8);
         usdcFeed.setAnswer(1e8);
         _sellAll(bob, s2); // en la ventana nueva vuelve a haber cupo
-        assertLt(router.soldInWindowUsd(), 1_000e18);
-        assertEq(router.sellWindowStart(), later);
+        assertLt(router.sellUsedUsd(), 1_000e18);
+        assertEq(router.sellUpdatedAt(), later);
+    }
+
+    // ─────────────────── Regresiones de la revisión interna ───────────────────
+
+    /// M-1: una "venta" sin swaps (= canje In-Kind por el Router) ya no puede consumir el cupo diario.
+    function test_sell_emptyStepsRevertsAndDoesNotConsumeWindow() public {
+        uint256 shares = _buy(attacker, address(usdc), 10_000e6);
+        uint256 before = router.sellCapacityUsd();
+        BietixRouter.SwapStep[] memory none = new BietixRouter.SwapStep[](0);
+        vm.startPrank(attacker);
+        vault.approve(address(router), shares);
+        vm.expectRevert(BietixRouter.InvalidStep.selector);
+        router.sell(shares, address(usdc), 0, none, block.timestamp, attacker);
+        vm.stopPrank();
+        assertEq(router.sellCapacityUsd(), before);
+    }
+
+    /// M-1: el cupo se consume por lo vendido, no por lo redimido (vender solo la parte BTC cuenta la mitad).
+    function test_sell_windowChargesOnlySoldValue() public {
+        uint256 shares = _buy(alice, address(usdc), 1_000e6);
+        BietixRouter.SwapStep[] memory all = _sellSteps(address(usdc), shares, 0);
+        BietixRouter.SwapStep[] memory onlyBtc = new BietixRouter.SwapStep[](1);
+        onlyBtc[0] = all[0];
+        vm.startPrank(alice);
+        vault.approve(address(router), shares);
+        router.sell(shares, address(usdc), 0, onlyBtc, block.timestamp, alice);
+        vm.stopPrank();
+        uint256 used = router.sellUsedUsd();
+        assertApproxEqRel(used, 500e18, 0.02e18);
+        assertGt(weth.balanceOf(alice), 0, "el ETH no vendido vuelve al usuario");
+    }
+
+    /// Ventana móvil: no se puede vender el doble del límite justo en el cambio de ventana.
+    function test_sell_rollingWindowBlocksDoubleSpendAtBoundary() public {
+        vm.prank(guardian);
+        router.decreaseSellLimit(1_500e18);
+        uint256 s1 = _buy(alice, address(usdc), 1_400e6);
+        uint256 s2 = _buy(bob, address(usdc), 1_400e6);
+        _sellAll(alice, s1); // ~$1.390 usados
+
+        // 1 hora después solo se recuperó 1/24 del cupo (~$62): la segunda venta no entra
+        vm.warp(block.timestamp + 1 hours);
+        BietixRouter.SwapStep[] memory steps = _sellSteps(address(usdc), s2, 0);
+        vm.startPrank(bob);
+        vault.approve(address(router), s2);
+        vm.expectPartialRevert(BietixRouter.SellLimitExceeded.selector);
+        router.sell(s2, address(usdc), 0, steps, block.timestamp, bob);
+        vm.stopPrank();
+        uint256 cap = router.sellCapacityUsd();
+        assertApproxEqAbs(cap, 1_500e18 - router.sellUsedUsd() + 1_500e18 / 24, 20e18);
+
+        // a las 12 h se recuperó la mitad
+        vm.warp(block.timestamp + 11 hours);
+        assertGt(router.sellCapacityUsd(), 750e18);
+        assertLt(router.sellCapacityUsd(), 900e18);
+    }
+
+    /// L-1: las listas de stables y de agregadores no se pueden cruzar con activos ni contratos propios.
+    function test_lists_crossChecked() public {
+        vm.startPrank(timelock);
+        address[5] memory badStables =
+            [address(dex), address(wbtc), address(weth), address(vault), address(router)];
+        for (uint256 i; i < badStables.length; i++) {
+            vm.expectRevert(abi.encodeWithSelector(BietixRouter.StableNotAllowed.selector, badStables[i]));
+            router.addStable(badStables[i]);
+        }
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.TargetNotAllowed.selector, address(router)));
+        router.addSwapTarget(address(router));
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.TargetNotAllowed.selector, address(guard)));
+        router.addSwapTarget(address(guard));
+        vm.stopPrank();
     }
 
     // ═══════════════════════════════ Fuzz ═══════════════════════════════

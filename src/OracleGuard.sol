@@ -5,6 +5,7 @@ import {
     AccessControlDefaultAdminRules
 } from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {AggregatorV3Interface} from "./interfaces/AggregatorV3Interface.sol";
 
 /// @title OracleGuard — red de seguridad de precios para el Router de BIETIX
@@ -97,6 +98,7 @@ contract OracleGuard is AccessControlDefaultAdminRules {
     error NotLooser();
     error OutOfBounds();
     error InvalidFeed();
+    error DecimalsMismatch(address token);
 
     constructor(
         address admin,
@@ -294,7 +296,8 @@ contract OracleGuard is AccessControlDefaultAdminRules {
     }
 
     // Se usa también desde el constructor (bucle de configuración inicial): avisos de bucle esperados.
-    // forge-lint: disable-start(require-revert-in-loop)
+    // forge-lint: disable-start(require-revert-in-loop, calls-loop)
+    // slither-disable-start calls-loop
     function _setStable(
         address token,
         uint8 tokenDecimals,
@@ -305,11 +308,19 @@ contract OracleGuard is AccessControlDefaultAdminRules {
     ) internal {
         if (token == address(0)) revert ZeroAddress();
         if (tokenDecimals == 0) revert InvalidFeed();
+        // Los decimales se confirman contra el propio token: un error de tipeo valuaría mal cada compra.
+        // Llamada de bajo nivel para que una dirección sin código revierta con un error claro.
+        // slither-disable-next-line low-level-calls
+        (bool ok, bytes memory ret) = token.staticcall(abi.encodeCall(IERC20Metadata.decimals, ()));
+        if (!ok || ret.length != 32 || abi.decode(ret, (uint256)) != tokenDecimals) {
+            revert DecimalsMismatch(token);
+        }
         stableDecimals[token] = tokenDecimals;
         _setFeed(stableKey(token), feed, maxStaleness, minPrice, maxPrice);
         emit StableSet(token, tokenDecimals);
     }
-    // forge-lint: disable-end(require-revert-in-loop)
+    // slither-disable-end calls-loop
+    // forge-lint: disable-end(require-revert-in-loop, calls-loop)
 
     function setSequencerFeed(AggregatorV3Interface feed) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (address(feed) == address(0)) revert ZeroAddress();

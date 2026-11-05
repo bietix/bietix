@@ -64,7 +64,7 @@ const ERROR_TEXT = {
   ExecutionWorseThanOracle: "El precio de mercado se alejó demasiado del de referencia. Probá de nuevo en unos minutos.",
   InsufficientOutput: "El precio cambió y recibirías menos que el mínimo. Probá de nuevo o subí la tolerancia.",
   TradeTooLarge: "El monto supera el máximo por operación ($25.000). Dividilo en varias operaciones.",
-  SellLimitExceeded: "Se alcanzó el límite diario de ventas. Mañana se renueva; mientras tanto podés canjear por BTC y ETH.",
+  SellLimitExceeded: "Se alcanzó el límite de ventas de 24 h. El cupo se recupera de a poco durante el día; mientras tanto podés canjear por BTC y ETH.",
   SupplyCapExceeded: "Se alcanzó el límite de BIETIX en circulación de esta etapa.",
   BelowMinimum: "El monto es menor al mínimo (0,01 BIETIX).",
   FaucetCooldown: "Ya pediste tokens de prueba hace menos de una hora.",

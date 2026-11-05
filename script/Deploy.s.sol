@@ -53,6 +53,7 @@ contract Deploy is DeployBase {
         p.treasury = vm.envAddress("TREASURY_ADDRESS");
         p.timelockDelay = vm.envOr("TIMELOCK_DELAY", uint256(1 days));
         p.adminTransferDelay = uint48(vm.envOr("ADMIN_TRANSFER_DELAY", uint256(2 days)));
+        p.guardianChangeDelay = vm.envOr("GUARDIAN_CHANGE_DELAY", uint256(7 days));
 
         p.wbtc = vm.envOr("WBTC_ADDRESS", WBTC);
         p.weth = vm.envOr("WETH_ADDRESS", WETH);

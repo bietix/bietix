@@ -51,10 +51,12 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
 
     /// @notice Máximo por operación, en USD con 18 decimales.
     uint256 public maxTradeUsd;
-    /// @notice Máximo de ventas a stablecoins por ventana de 24 h, en USD con 18 decimales.
+    /// @notice Máximo de ventas a stablecoins por ventana móvil de 24 h, en USD con 18 decimales.
     uint256 public sellLimitUsd;
-    uint256 public sellWindowStart;
-    uint256 public soldInWindowUsd;
+    /// @notice Ventas acumuladas (USD 1e18) al momento `sellUpdatedAt`. Se "descarga" linealmente:
+    ///         el cupo completo se recupera en 24 h. Así no se puede vender 2 veces el límite en el cambio de ventana.
+    uint256 public sellUsedUsd;
+    uint256 public sellUpdatedAt;
 
     mapping(address => bool) public isStable;
     mapping(address => bool) public isSwapTarget;
@@ -131,7 +133,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         sellFeeBps = c.sellFeeBps;
         maxTradeUsd = c.maxTradeUsd;
         sellLimitUsd = c.sellLimitUsd;
-        sellWindowStart = block.timestamp;
+        sellUpdatedAt = block.timestamp;
 
         _grantRole(UNPAUSER_ROLE, c.safe);
         _grantRole(GUARDIAN_ROLE, c.safe);
@@ -215,9 +217,7 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
 
         {
             (uint256 btcExp, uint256 ethExp) = VAULT.previewRedeem(shares);
-            uint256 valueUsd = oracle.basketValueUsd(btcExp, ethExp);
-            _checkTradeSize(valueUsd);
-            _consumeSellWindow(valueUsd);
+            _checkTradeSize(oracle.basketValueUsd(btcExp, ethExp));
         }
 
         uint256[4] memory start = _snapshot(stable);
@@ -280,6 +280,9 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
     }
 
     /// @dev Pasos 4 a 8 de la venta, separados para mantener la función principal simple.
+    ///      Leer saldos y escribir el cupo después de los swaps es intencional: se mide lo efectivamente
+    ///      vendido. `sell` es nonReentrant y los agregadores están en lista blanca.
+    // slither-disable-start reentrancy-balance,reentrancy-benign
     function _swapAndPay(
         address stable,
         SwapStep[] calldata steps,
@@ -294,6 +297,11 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         _runSwaps(steps, address(ASSET_BTC), address(ASSET_ETH), btcGot, ethGot);
         uint256 btcSold = btcGot - (ASSET_BTC.balanceOf(address(this)) - start[0]);
         uint256 ethSold = ethGot - (ASSET_ETH.balanceOf(address(this)) - start[1]);
+        // Una "venta" sin swaps sería un canje In-Kind que igual consumiría el cupo diario: se rechaza.
+        // slither-disable-next-line incorrect-equality
+        if (btcSold == 0 && ethSold == 0) revert InvalidStep();
+        // El cupo de ventas se consume por lo realmente vendido, no por lo redimido.
+        _consumeSellWindow(oracle.basketValueUsd(btcSold, ethSold));
 
         // 5. Medir la stable recibida y controlar contra oráculo
         uint256 gross = IERC20(stable).balanceOf(address(this)) - start[2];
@@ -313,6 +321,8 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         _refund(ASSET_ETH, start[1], receiver);
     }
 
+    // slither-disable-end reentrancy-balance,reentrancy-benign
+
     // ═══════════════════════════════ Vistas ═══════════════════════════════
 
     /// @notice Cuántos BIETIX se pueden acuñar con estas cantidades, descontando la comisión In-Kind del vault.
@@ -322,8 +332,8 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
 
     /// @notice Cuánto USD queda disponible en la ventana de ventas actual.
     function sellCapacityUsd() external view returns (uint256) {
-        if (block.timestamp >= sellWindowStart + SELL_WINDOW) return sellLimitUsd;
-        return soldInWindowUsd >= sellLimitUsd ? 0 : sellLimitUsd - soldInWindowUsd;
+        uint256 used = _currentSellUsed();
+        return used >= sellLimitUsd ? 0 : sellLimitUsd - used;
     }
 
     // ═══════════════════════════════ Internas ═══════════════════════════════
@@ -430,14 +440,17 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         if (valueUsd > maxTradeUsd) revert TradeTooLarge(valueUsd, maxTradeUsd);
     }
 
+    /// @dev Ventas acumuladas a hoy: lo vendido se descuenta linealmente a razón de `sellLimitUsd` cada 24 h.
+    function _currentSellUsed() internal view returns (uint256) {
+        uint256 decay = Math.mulDiv(sellLimitUsd, block.timestamp - sellUpdatedAt, SELL_WINDOW);
+        return sellUsedUsd > decay ? sellUsedUsd - decay : 0;
+    }
+
     function _consumeSellWindow(uint256 valueUsd) internal {
-        if (block.timestamp >= sellWindowStart + SELL_WINDOW) {
-            sellWindowStart = block.timestamp;
-            soldInWindowUsd = 0;
-        }
-        uint256 sold = soldInWindowUsd + valueUsd;
-        if (sold > sellLimitUsd) revert SellLimitExceeded(sold, sellLimitUsd);
-        soldInWindowUsd = sold;
+        uint256 used = _currentSellUsed() + valueUsd;
+        if (used > sellLimitUsd) revert SellLimitExceeded(used, sellLimitUsd);
+        sellUsedUsd = used;
+        sellUpdatedAt = block.timestamp;
     }
 
     function _refund(IERC20 token, uint256 startBalance, address to) internal {
@@ -502,6 +515,11 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
     // forge-lint: disable-start(require-revert-in-loop)
     function _addStable(address token) internal {
         if (token == address(0)) revert ZeroAddress();
+        // Una stable no puede ser un agregador, ni uno de los activos del índice, ni el propio token.
+        if (
+            isSwapTarget[token] || token == address(ASSET_BTC) || token == address(ASSET_ETH)
+                || token == address(VAULT) || token == address(this)
+        ) revert StableNotAllowed(token);
         isStable[token] = true;
         emit StableChanged(token, true);
     }
@@ -522,7 +540,8 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         // Nunca se permite llamar al vault ni a los activos directamente.
         if (
             target == address(0) || target == address(VAULT) || target == address(ASSET_BTC)
-                || target == address(ASSET_ETH) || isStable[target]
+                || target == address(ASSET_ETH) || isStable[target] || target == address(this)
+                || target == address(oracle)
         ) revert TargetNotAllowed(target);
         isSwapTarget[target] = true;
         emit SwapTargetChanged(target, true);
