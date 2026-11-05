@@ -194,16 +194,48 @@ async function loadBalances() {
 }
 
 // ═══════════════════════════════ Cotizaciones ═══════════════════════════════
-// En testnet los swaps van por el DEX de prueba. En mainnet este módulo usa la API de un agregador.
-const swaps = {
+// Cada proveedor tiene dos pasos: `quote` (cuánto se recibiría + contexto) y `step` (el SwapStep para el Router).
+// En testnet los swaps van por el DEX de prueba; en mainnet por KyberSwap, siempre a través de /api/swap.
+const dexSwaps = {
   async quote(tokenIn, amountIn, tokenOut) {
-    return c(net.contracts.dex, DEX).quote(tokenIn, amountIn, tokenOut);
+    const out = await c(net.contracts.dex, DEX).quote(tokenIn, amountIn, tokenOut);
+    return { out, ctx: { tokenIn, amountIn, tokenOut, out } };
   },
-  step(tokenIn, amountIn, tokenOut, minOut) {
-    const data = new Interface(DEX).encodeFunctionData("swap", [tokenIn, amountIn, tokenOut, minOut, net.contracts.router]);
-    return [net.contracts.dex, tokenIn, amountIn, data];
+  async step(ctx) {
+    const minOut = withSlip(ctx.out);
+    const data = new Interface(DEX).encodeFunctionData("swap", [ctx.tokenIn, ctx.amountIn, ctx.tokenOut, minOut, net.contracts.router]);
+    return [net.contracts.dex, ctx.tokenIn, ctx.amountIn, data];
   },
 };
+
+async function swapApi(body) {
+  const res = await fetch("/api/swap", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chainId, ...body }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || "No se pudo cotizar en este momento.");
+  return json;
+}
+
+const kyberSwaps = {
+  async quote(tokenIn, amountIn, tokenOut) {
+    const r = await swapApi({ action: "quote", tokenIn, tokenOut, amountIn: amountIn.toString() });
+    return { out: BigInt(r.amountOut), ctx: { tokenIn, amountIn, tokenOut, routeSummary: r.routeSummary } };
+  },
+  async step(ctx) {
+    const r = await swapApi({ action: "build", routeSummary: ctx.routeSummary, slippageBps, origin: account });
+    // Segunda barrera en el navegador (la primera es el servidor y la última, el contrato):
+    if (r.tokenIn !== ctx.tokenIn.toLowerCase() || r.tokenOut !== ctx.tokenOut.toLowerCase() || BigInt(r.amountIn) !== ctx.amountIn) {
+      throw new Error("La ruta del agregador no coincide con la cotización. Probá de nuevo.");
+    }
+    return [r.to, ctx.tokenIn, ctx.amountIn, r.data];
+  },
+};
+
+const swaps = net.swaps === "kyber" ? kyberSwaps : dexSwaps;
+const ZERO_QUOTE = { out: 0n, ctx: null };
 
 async function quoteBuy() {
   const stable = $("buy-stable").value;
@@ -212,10 +244,11 @@ async function quoteBuy() {
   const fee = ceilFee(amountIn, st.buyFee);
   const net_ = amountIn - fee;
   const half = net_ / 2n;
-  const [qb, qe] = await Promise.all([
+  const [rb, re] = await Promise.all([
     swaps.quote(tokens[stable].address, half, tokens.WBTC.address),
     swaps.quote(tokens[stable].address, net_ - half, tokens.WETH.address),
   ]);
+  const qb = rb.out, qe = re.out;
   const shares = await c(net.contracts.router, ROUTER).sharesFor(qb, qe);
   const minShares = withSlip(shares);
   $("buy-out").textContent = amt(shares, 18, 4);
@@ -224,7 +257,7 @@ async function quoteBuy() {
   const totalFee = fee + ceilFee(net_, 5n);
   $("buy-fee").textContent = `${amt(totalFee, tokens[stable].decimals, 2)} ${stable}`;
   $("buy-min").textContent = `${amt(minShares, 18, 4)} BIETIX`;
-  return { stable, amountIn, half, net: net_, qb, qe, minShares };
+  return { stable, amountIn, minShares, ctxs: [rb.ctx, re.ctx] };
 }
 
 async function quoteSell() {
@@ -233,11 +266,11 @@ async function quoteSell() {
   const shares = parseInput($("sell-amount").value, 18);
   if (shares === 0n) { resetQuote("sell"); return null; }
   const [b, e] = await c(net.contracts.vault, VAULT).previewRedeem(shares);
-  const [qb, qe] = await Promise.all([
-    b > 0n ? swaps.quote(tokens.WBTC.address, b, tokens[stable].address) : 0n,
-    e > 0n ? swaps.quote(tokens.WETH.address, e, tokens[stable].address) : 0n,
+  const [rb, re] = await Promise.all([
+    b > 0n ? swaps.quote(tokens.WBTC.address, b, tokens[stable].address) : ZERO_QUOTE,
+    e > 0n ? swaps.quote(tokens.WETH.address, e, tokens[stable].address) : ZERO_QUOTE,
   ]);
-  const gross = qb + qe;
+  const gross = rb.out + re.out;
   const fee = ceilFee(gross, st.sellFee);
   const out = gross - fee;
   const minOut = withSlip(out);
@@ -245,7 +278,7 @@ async function quoteSell() {
   $("sell-out").textContent = amt(out, d, 2);
   $("sell-fee").textContent = `${amt(fee, d, 2)} ${stable}`;
   $("sell-min").textContent = `${amt(minOut, d, 2)} ${stable}`;
-  return { stable, shares, b, e, qb, qe, minOut };
+  return { stable, shares, minOut, ctxs: [rb.ctx, re.ctx].filter(Boolean) };
 }
 
 async function quoteExit() {
@@ -281,13 +314,13 @@ async function doBuy(ev) {
   if (!q) return;
   await run("buy-btn", async () => {
     await ensureAllowance(tokens[q.stable].address, net.contracts.router, q.amountIn, q.stable);
-    const steps = [
-      swaps.step(tokens[q.stable].address, q.half, tokens.WBTC.address, withSlip(q.qb)),
-      swaps.step(tokens[q.stable].address, q.net - q.half, tokens.WETH.address, withSlip(q.qe)),
-    ];
+    // Cotización nueva justo antes de firmar: las rutas del agregador vencen en segundos.
+    status("Preparando la ruta de compra…");
+    const f = (await quoteBuy()) || q;
+    const steps = await Promise.all(f.ctxs.map((x) => swaps.step(x)));
     status("Confirmá la compra en tu billetera…");
     const router = c(net.contracts.router, ROUTER, signer);
-    const tx = await router.buy(tokens[q.stable].address, q.amountIn, q.minShares, steps, deadline(), account, await gasOverrides());
+    const tx = await router.buy(tokens[f.stable].address, f.amountIn, f.minShares, steps, deadline(), account, await gasOverrides());
     status("Comprando…");
     await tx.wait();
     $("buy-amount").value = "";
@@ -302,12 +335,12 @@ async function doSell(ev) {
   if (!q) return;
   await run("sell-btn", async () => {
     await ensureAllowance(net.contracts.vault, net.contracts.router, q.shares, "BIETIX");
-    const steps = [];
-    if (q.b > 0n) steps.push(swaps.step(tokens.WBTC.address, q.b, tokens[q.stable].address, withSlip(q.qb)));
-    if (q.e > 0n) steps.push(swaps.step(tokens.WETH.address, q.e, tokens[q.stable].address, withSlip(q.qe)));
+    status("Preparando la ruta de venta…");
+    const f = (await quoteSell()) || q;
+    const steps = await Promise.all(f.ctxs.map((x) => swaps.step(x)));
     status("Confirmá la venta en tu billetera…");
     const router = c(net.contracts.router, ROUTER, signer);
-    const tx = await router.sell(q.shares, tokens[q.stable].address, q.minOut, steps, deadline(), account, await gasOverrides());
+    const tx = await router.sell(f.shares, tokens[f.stable].address, f.minOut, steps, deadline(), account, await gasOverrides());
     status("Vendiendo…");
     await tx.wait();
     $("sell-amount").value = "";
@@ -509,6 +542,13 @@ function initTabs() {
 function init() {
   $("net-pill").hidden = false;
   $("net-pill").textContent = net.name;
+  // Red configurada pero todavía sin contratos (por ejemplo, Arbitrum One antes del lanzamiento).
+  if (!net.contracts.vault || !net.contracts.router) {
+    showBanner([[`Bietix todavía no está disponible en ${net.name}. Las direcciones oficiales se publicarán en este sitio.`, true]]);
+    document.querySelectorAll("form button[type=submit], #connect").forEach((b) => { b.disabled = true; });
+    $("footer-net").textContent = `Red: ${net.name}.`;
+    return;
+  }
   $("footer-net").textContent = net.testnet
     ? `Red: ${net.name} (prueba). Los tokens de esta red no tienen valor.`
     : `Red: ${net.name}.`;

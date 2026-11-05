@@ -46,6 +46,20 @@ jobs:
         env:
           FOUNDRY_PROFILE: ci
 
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pruebas del intermediario con KyberSwap
+        run: node --test frontend/netlify/lib/*.test.mjs
+      - name: Sintaxis del sitio
+        run: node --check frontend/app.js && node --check frontend/config.js
+
   slither:
     runs-on: ubuntu-latest
     steps:
