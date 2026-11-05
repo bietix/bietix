@@ -1,6 +1,6 @@
 # Pre-auditoría propia de Bietix
 
-*6 de noviembre de 2026 · contratos en `src/` · Solidity 0.8.38*
+*5 de noviembre de 2026 · contratos en `src/` · Solidity 0.8.38*
 
 Antes de una auditoría externa se revisan los cuatro puntos que los auditores miran primero: calidad del código, cobertura de pruebas, análisis estático y los riesgos típicos de un token. **Resultado: todo en verde.**
 
