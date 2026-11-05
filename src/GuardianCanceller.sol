@@ -58,13 +58,15 @@ contract GuardianCanceller {
 
     /// @notice El Safe propone un guardián nuevo (address(0) = quitar el veto). Se aplica tras `CHANGE_DELAY`.
     // address(0) es válido a propósito: significa quitar el veto del guardián.
+    // slither-disable-start missing-zero-check
     // forge-lint: disable-next-line(missing-zero-check)
-    // slither-disable-next-line missing-zero-check
     function proposeGuardian(address newGuardian) external onlySafe {
         pendingGuardian = newGuardian;
         changeReadyAt = block.timestamp + CHANGE_DELAY;
         emit GuardianChangeProposed(newGuardian, changeReadyAt);
     }
+
+    // slither-disable-end missing-zero-check
 
     /// @notice El Safe retira un cambio propuesto que todavía no se aplicó.
     function cancelGuardianChange() external onlySafe {
