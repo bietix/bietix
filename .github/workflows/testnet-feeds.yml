@@ -1,0 +1,61 @@
+name: testnet - refrescar oraculos
+
+# En Arbitrum Sepolia los precios vienen de oráculos de prueba (TestnetAggregator).
+# OracleGuard rechaza precios con más de 26 h, así que cada 6 h se llama a refresh() en cada feed.
+# refresh() lo puede llamar cualquiera: solo actualiza la fecha, no el precio.
+#
+# Usa una billetera BOT exclusiva para esto, con muy poco ETH de testnet y sin ningún rol:
+#   Settings → Secrets and variables → Actions → New repository secret → TESTNET_BOT_KEY
+# Nunca usar acá la billetera que desplegó ni ninguna de mainnet.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch: # botón "Run workflow" para correrlo a mano
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testnet-feeds
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    if: github.repository == 'bietix/bietix'
+    env:
+      RPC: https://sepolia-rollup.arbitrum.io/rpc
+      FEEDS: >-
+        0xD0b49CB68e50A68FAe8BC3837752919D976B5899
+        0x30C603851265f2a3cBfD677a92D383E30d44Ce2A
+        0x018B65799A416BA7f4f184F7b111011a04e73D40
+        0x6335fD2Cc58b5dFA630d08b12fb7e4F04ceC1C52
+        0xE7F10D7cbBA665Df1C37d07892B7629280dE4DC2
+    steps:
+      - name: Instalar Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Refrescar los 5 feeds
+        env:
+          ETH_PRIVATE_KEY: ${{ secrets.TESTNET_BOT_KEY }}
+        run: |
+          if [ -z "$ETH_PRIVATE_KEY" ]; then echo "Falta el secreto TESTNET_BOT_KEY"; exit 1; fi
+          test "$(cast chain-id --rpc-url "$RPC")" = "421614" || { echo "No es Arbitrum Sepolia"; exit 1; }
+          for f in $FEEDS; do
+            cast send "$f" "refresh()" --rpc-url "$RPC" --private-key "$ETH_PRIVATE_KEY" > /dev/null
+            echo "refresh() confirmado en $f"
+          done
+          for f in $FEEDS; do
+            echo "$f actualizado en: $(cast call "$f" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --rpc-url "$RPC" | sed -n 4p)"
+          done
+
+      - name: Avisar si el bot se queda sin ETH
+        run: |
+          BAL=$(cast balance "$(cast wallet address --private-key "$ETH_PRIVATE_KEY")" --rpc-url "$RPC" --ether)
+          echo "Saldo del bot: $BAL ETH"
+          awk "BEGIN{exit !($BAL < 0.002)}" && echo "::warning::El bot de testnet tiene menos de 0.002 ETH" || true
+        env:
+          ETH_PRIVATE_KEY: ${{ secrets.TESTNET_BOT_KEY }}
