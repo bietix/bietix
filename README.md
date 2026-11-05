@@ -3,7 +3,7 @@
 Token ERC-20 donde **1 BIETIX = 0,0001 WBTC + 0,003 WETH** (valores de prueba; los definitivos se fijan al lanzar).
 El precio del token es una fórmula de BTC y ETH, respaldada 1:1 por los activos reales que guarda el contrato.
 
-> Estado: **Paso 6 de la hoja de ruta** — contratos, pruebas (incluido fork de Arbitrum One) y scripts de despliegue listos. Próximo: interfaz web mínima y despliegue en Arbitrum Sepolia. Ver **DEPLOY.md**.
+> Estado: contratos, pruebas (incluido fork de Arbitrum One) y despliegue en Arbitrum Sepolia listos; revisión interna de seguridad corregida. Próximo: auditoría externa e integración con un agregador real. Ver **DEPLOY.md**. Para reportar vulnerabilidades, ver **SECURITY.md**.
 
 ## Qué hay en este repositorio
 

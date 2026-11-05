@@ -2,7 +2,16 @@ name: tests
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Permisos mínimos: el flujo solo lee el código.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -10,30 +19,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          persist-credentials: false
 
       - name: Instalar Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
 
       - name: Formato
         run: forge fmt --check
 
-      - name: Compilar
-        run: forge build --sizes
+      - name: Compilar (sin avisos de lint)
+        run: |
+          forge build --sizes 2>&1 | tee build.log
+          if grep -qE "^(warning|error)" build.log; then echo "Hay avisos de compilación o lint"; exit 1; fi
 
-      - name: Pruebas (unitarias, fuzz, invariantes)
+      - name: Pruebas (unitarias, fuzz, invariantes y despliegue)
         run: forge test -vv
+        env:
+          # Si se carga el secreto ARBITRUM_RPC_URL en el repositorio, también corren las pruebas sobre fork.
+          ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
 
-      - name: Cobertura
-        run: forge coverage --no-match-coverage "test|mocks" --ir-minimum
+      - name: Pruebas largas (solo en main)
+        if: github.ref == 'refs/heads/main'
+        run: forge test
+        env:
+          FOUNDRY_PROFILE: ci
 
   slither:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          persist-credentials: false
       - uses: crytic/slither-action@v0.4.0
         with:
-          target: src/
-          fail-on: medium
+          target: .
+          # Usa slither.config.json; hoy hay 0 resultados, así que cualquier hallazgo nuevo frena el PR.
+          fail-on: low
