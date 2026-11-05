@@ -27,8 +27,25 @@ Abrí **http://localhost:8000** en el navegador (con MetaMask instalado). Para c
 
 ## Configuración
 
-`config.js` tiene las direcciones de cada red. La página usa Arbitrum Sepolia por defecto; con `?chain=31337`
-usa una red local (anvil) para desarrollo.
+`config.js` tiene las direcciones de cada red. La página usa Arbitrum Sepolia por defecto; con `?chain=42161`
+muestra Arbitrum One (aviso de "todavía no disponible" hasta cargar las direcciones del despliegue) y con
+`?chain=31337` una red local (anvil) para desarrollo.
+
+## Swaps en mainnet: KyberSwap vía `/api/swap`
+
+En testnet los swaps van por el DEX de prueba. En Arbitrum One van por **KyberSwap**, pero el navegador nunca
+habla con KyberSwap directamente: lo hace la función de Netlify `netlify/functions/swap.mjs`
+(lógica en `netlify/lib/kyber.mjs`).
+
+1. **quote:** pide la mejor ruta stable ↔ WBTC/WETH. Solo acepta esos pares y verifica que la ruta coincida con lo pedido.
+2. **build:** arma la transacción con emisor y receptor = **BietixRouter** (el usuario no puede cambiarlos) y
+   rechaza cualquier respuesta cuyo destino no sea el router de KyberSwap `0x6131…37b5`, que pida ETH nativo o
+   cuyo monto no coincida.
+
+Después, el contrato BietixRouter vuelve a validar todo on-chain (lista blanca, saldos, control contra oráculo).
+Pruebas: `node --test frontend/netlify/lib/*.test.mjs`. Variables de entorno: ver `netlify.toml`.
+
+
 
 ## Publicación (Netlify)
 
@@ -36,7 +53,7 @@ El archivo `netlify.toml` en la raíz del repositorio le indica a Netlify que pu
 solo vuelva a publicar cuando cambie algo acá adentro. También define cabeceras de seguridad:
 
 - **Content-Security-Policy:** la página solo ejecuta su propio código y solo se conecta a los nodos de Arbitrum
-  permitidos. Si en el futuro se agrega otra red o la API de un agregador, hay que sumar su dominio a `connect-src`.
+  permitidos. El agregador se consulta a través de `/api/swap` (mismo dominio), así que no hace falta agregarlo.
 - **X-Frame-Options:** ningún otro sitio puede mostrar la página dentro de un marco (protección contra clickjacking).
 
 Configuración en Netlify: *Add new site → Import an existing project → GitHub → repositorio* y dejar los campos
@@ -44,5 +61,6 @@ de build vacíos (los toma de `netlify.toml`).
 
 ## Pendiente para mainnet
 
-En testnet los swaps van por el DEX de prueba (objeto `swaps` en `app.js`). Para mainnet ese objeto se
-reemplaza por la API de un agregador (1inch, 0x u Odos), que devuelve la cotización y los datos del swap.
+- Cargar las direcciones del despliegue en `config.js` (entrada 42161) y `BIETIX_ROUTER_42161` en Netlify.
+- Un proveedor de RPC propio en lugar del nodo público `arb1.arbitrum.io` (y sumarlo a `connect-src`).
+- Agregar Odos como agregador de respaldo.

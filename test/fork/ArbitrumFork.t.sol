@@ -25,7 +25,7 @@ interface ISwapRouter02 {
 /// @notice Usa los tokens, oráculos de Chainlink y pools de Uniswap V3 REALES.
 ///         Se saltean solas si no hay RPC configurado (variable ARBITRUM_RPC_URL en el archivo .env).
 ///         Correr con:  forge test --match-path "test/fork/*" -vv
-contract ArbitrumForkTest is Test {
+abstract contract ArbitrumForkBase is Test {
     // ─────────────── Direcciones en Arbitrum One ───────────────
     address internal constant WBTC = 0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f;
     address internal constant WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
@@ -57,7 +57,7 @@ contract ArbitrumForkTest is Test {
     uint256 internal unitEth;
     bool internal forked;
 
-    function setUp() public {
+    function setUp() public virtual {
         string memory rpc = vm.envOr("ARBITRUM_RPC_URL", string(""));
         if (bytes(rpc).length == 0) return; // sin RPC: las pruebas se saltean
         vm.createSelectFork(rpc);
@@ -138,7 +138,9 @@ contract ArbitrumForkTest is Test {
         }
         _;
     }
+}
 
+contract ArbitrumForkTest is ArbitrumForkBase {
     // ═══════════════════════════ Verificación de feeds ═══════════════════════════
 
     /// Confirma que cada dirección es el feed esperado y muestra su antigüedad (para fijar maxStaleness).

@@ -6,6 +6,23 @@
   # Solo se vuelve a publicar si cambió algo dentro de frontend/ (cambios en contratos o pruebas no publican).
   ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- ."
 
+# Funciones del servidor (relativas a frontend/): /api/swap hace de intermediario con KyberSwap.
+# Variables de entorno en Netlify → Site configuration → Environment variables:
+#   BIETIX_ROUTER_42161  dirección del BietixRouter en Arbitrum One (se carga al desplegar en mainnet)
+#   KYBER_CLIENT_ID      identificador ante KyberSwap (por defecto "bietix")
+#   KYBER_API_KEY        opcional: clave de KyberSwap con más límite (nunca llega al navegador)
+#   ALLOWED_ORIGINS      opcional: orígenes permitidos (por defecto https://bietix.com)
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# El código de las funciones no se sirve como archivo estático.
+[[redirects]]
+  from = "/netlify/*"
+  to = "/404"
+  status = 404
+  force = true
+
 # Cabeceras de seguridad para todas las páginas.
 [[headers]]
   for = "/*"

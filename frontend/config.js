@@ -1,8 +1,26 @@
 // Configuración por red. La página elige la red con ?chain=<id> (por defecto Arbitrum Sepolia).
+// `swaps`: "dex" = DEX de prueba de testnet · "kyber" = KyberSwap a través de /api/swap (función de Netlify).
 export const NETWORKS = {
+  // Arbitrum One: las direcciones de Bietix se completan al desplegar en mainnet (hasta entonces, null).
+  42161: {
+    name: "Arbitrum One",
+    testnet: false,
+    swaps: "kyber",
+    rpc: "https://arb1.arbitrum.io/rpc",
+    explorer: "https://arbiscan.io",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    contracts: { vault: null, router: null, oracle: null, timelock: null },
+    tokens: {
+      USDC: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+      USDT: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+      WBTC: { address: "0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f", decimals: 8 },
+      WETH: { address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", decimals: 18 },
+    },
+  },
   421614: {
     name: "Arbitrum Sepolia",
     testnet: true,
+    swaps: "dex",
     rpc: "https://sepolia-rollup.arbitrum.io/rpc",
     explorer: "https://sepolia.arbiscan.io",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
@@ -24,6 +42,7 @@ export const NETWORKS = {
   31337: {
     name: "Red local",
     testnet: true,
+    swaps: "dex",
     rpc: "http://127.0.0.1:8545",
     explorer: "",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
