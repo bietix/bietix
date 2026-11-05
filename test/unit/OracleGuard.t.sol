@@ -6,6 +6,7 @@ import {OracleGuard} from "../../src/OracleGuard.sol";
 import {noFeeds, noStables, noAddresses} from "../utils/Empty.sol";
 import {AggregatorV3Interface} from "../../src/interfaces/AggregatorV3Interface.sol";
 import {MockAggregator} from "../mocks/MockAggregator.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
 
 /// @notice Pruebas del OracleGuard (secciones 4.3 a 4.9 de las especificaciones).
 contract OracleGuardTest is Test {
@@ -21,8 +22,8 @@ contract OracleGuardTest is Test {
     address internal safe = makeAddr("safe");
     address internal guardian = makeAddr("guardian");
     address internal attacker = makeAddr("attacker");
-    address internal usdc = makeAddr("USDC");
-    address internal usdt = makeAddr("USDT");
+    address internal usdc = address(new MockERC20("USD Coin", "USDC", 6));
+    address internal usdt = address(new MockERC20("Tether", "USDT", 6));
 
     bytes32 internal BTC;
     bytes32 internal ETH;
@@ -405,6 +406,12 @@ contract OracleGuardTest is Test {
         guard.setStable(address(0), 6, f, DAY_STALE, 0.5e18, 1.5e18);
         vm.expectRevert(OracleGuard.InvalidFeed.selector);
         guard.setStable(makeAddr("X"), 0, f, DAY_STALE, 0.5e18, 1.5e18);
+        // decimales que no coinciden con el token, o una dirección que no es un token
+        vm.expectRevert(abi.encodeWithSelector(OracleGuard.DecimalsMismatch.selector, usdc));
+        guard.setStable(usdc, 18, f, DAY_STALE, 0.5e18, 1.5e18);
+        address notToken = makeAddr("X");
+        vm.expectRevert(abi.encodeWithSelector(OracleGuard.DecimalsMismatch.selector, notToken));
+        guard.setStable(notToken, 6, f, DAY_STALE, 0.5e18, 1.5e18);
         vm.stopPrank();
     }
 

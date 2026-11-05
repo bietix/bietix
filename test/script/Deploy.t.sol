@@ -10,6 +10,7 @@ import {DeployBase} from "../../script/DeployBase.sol";
 import {BietixRouter} from "../../src/BietixRouter.sol";
 import {BietixVault} from "../../src/BietixVault.sol";
 import {OracleGuard} from "../../src/OracleGuard.sol";
+import {GuardianCanceller} from "../../src/GuardianCanceller.sol";
 import {TestnetDex} from "../../script/testnet/TestnetMocks.sol";
 
 /// @notice Prueba los scripts de despliegue y el gobierno resultante (Safe + Timelock + guardián).
@@ -111,10 +112,70 @@ contract DeployTest is Test {
         bytes32 id = t.hashOperation(address(d.vault), 0, call, bytes32(0), bytes32("malo"));
         assertTrue(t.isOperationPending(id));
 
+        // el guardián cancela a través de GuardianCanceller (no tiene el rol directo en el Timelock)
         vm.prank(guardian);
+        vm.expectRevert();
         t.cancel(id);
+        vm.prank(guardian);
+        d.canceller.cancel(id);
         assertFalse(t.isOperation(id));
         assertEq(d.vault.treasury(), treasury);
+    }
+
+    /// Regresión de la revisión interna (M-2): el guardián no puede vetar para siempre su propia remoción.
+    function test_governance_safeCanRemoveGuardianVeto() public {
+        GuardianCanceller c = d.canceller;
+        vm.prank(guardian);
+        vm.expectRevert(GuardianCanceller.NotSafe.selector);
+        c.proposeGuardian(guardian);
+
+        vm.prank(safe); // llamada directa: no pasa por el Timelock, el guardián no puede cancelarla
+        c.proposeGuardian(address(0));
+        vm.expectRevert(abi.encodeWithSelector(GuardianCanceller.ChangeNotReady.selector, c.changeReadyAt()));
+        c.applyGuardianChange();
+
+        // mientras corre la espera, el guardián todavía puede vetar
+        TimelockController t = d.timelock;
+        bytes memory call = abi.encodeCall(BietixVault.setMintFee, (10));
+        uint256 delay = t.getMinDelay();
+        vm.prank(safe);
+        t.schedule(address(d.vault), 0, call, bytes32(0), bytes32(0), delay);
+        bytes32 id = t.hashOperation(address(d.vault), 0, call, bytes32(0), bytes32(0));
+        vm.prank(guardian);
+        c.cancel(id);
+
+        vm.warp(block.timestamp + c.CHANGE_DELAY());
+        c.applyGuardianChange(); // cualquiera puede aplicarlo
+        assertEq(c.guardian(), address(0));
+
+        vm.prank(safe);
+        t.schedule(address(d.vault), 0, call, bytes32(0), bytes32(0), delay);
+        vm.prank(guardian);
+        vm.expectRevert(GuardianCanceller.NotGuardian.selector);
+        c.cancel(id);
+        vm.warp(block.timestamp + delay);
+        vm.prank(safe);
+        t.execute(address(d.vault), 0, call, bytes32(0), bytes32(0));
+        assertEq(d.vault.mintFeeBps(), 10);
+    }
+
+    function test_governance_guardianChangeCanBeWithdrawnAndGuardianCanResign() public {
+        GuardianCanceller c = d.canceller;
+        address g2 = makeAddr("guardian2");
+        vm.prank(safe);
+        c.proposeGuardian(g2);
+        vm.prank(safe);
+        c.cancelGuardianChange();
+        vm.expectRevert(GuardianCanceller.NoPendingChange.selector);
+        c.applyGuardianChange();
+        assertEq(c.guardian(), guardian);
+
+        vm.prank(alice);
+        vm.expectRevert(GuardianCanceller.NotGuardian.selector);
+        c.resign();
+        vm.prank(guardian);
+        c.resign();
+        assertEq(c.guardian(), address(0));
     }
 
     function test_governance_onlySafeCanPropose() public {

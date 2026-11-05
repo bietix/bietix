@@ -17,6 +17,10 @@ Billetera que despliega ──▶ ningún permiso (renuncia en la misma transacc
 ```
 
 - **Timelock:** el Safe es el único que propone y ejecuta. El Safe y el guardián pueden cancelar.
+  El guardián cancela a través del contrato **GuardianCanceller** (no tiene el rol directo), así el Safe
+  puede reemplazarlo o quitarle el veto con `proposeGuardian(nuevo)` → espera `GUARDIAN_CHANGE_DELAY`
+  (7 días en mainnet) → `applyGuardianChange()`. El guardián no puede vetar ese cambio, pero sí sigue
+  vetando durante la espera: si el Safe fuera robado, los usuarios tienen tiempo de salir In-Kind.
 - **Vault, OracleGuard y Router:** el administrador es el Timelock desde el primer bloque.
 - **Feeds, stablecoins y agregadores:** se configuran en el constructor, así que el sistema funciona
   desde el despliegue sin esperar al timelock.
@@ -103,4 +107,4 @@ Ejemplo: subir el límite de supply.
    `predecessor` = 0x0, `salt` = cualquier valor, `delay` = espera configurada.
 2. Firmás con 2 de 3 → queda programado y visible públicamente.
 3. Pasada la espera, otra transacción del Safe llama a `execute` con los mismos datos.
-4. Si la propuesta fuera maliciosa, el guardián llama a `cancel(id)` durante la espera.
+4. Si la propuesta fuera maliciosa, el guardián llama a `cancel(id)` **en GuardianCanceller** durante la espera.

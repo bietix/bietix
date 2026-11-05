@@ -66,6 +66,7 @@ contract DeployTestnet is DeployBase {
         p.treasury = treasury;
         p.timelockDelay = vm.envOr("TIMELOCK_DELAY", uint256(5 minutes)); // corto para poder practicar
         p.adminTransferDelay = 1 hours;
+        p.guardianChangeDelay = vm.envOr("GUARDIAN_CHANGE_DELAY", uint256(10 minutes)); // corto para practicar
         p.wbtc = address(m.wbtc);
         p.weth = address(m.weth);
         p.unitBtc = 10_000;
