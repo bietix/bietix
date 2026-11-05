@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.38;
 
+import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -12,7 +13,7 @@ import {AggregatorV3Interface} from "../../src/interfaces/AggregatorV3Interface.
 // ════════════════════════════════════════════════════════════════════════════
 
 /// @notice Token de prueba con canilla (faucet) pública y acuñadores autorizados (el DEX de prueba).
-contract TestnetToken is ERC20, Ownable {
+contract TestnetToken is ERC20, ERC20Permit, Ownable {
     uint8 private immutable _dec;
     uint256 public immutable FAUCET_AMOUNT;
     uint256 public constant FAUCET_COOLDOWN = 1 hours;
@@ -25,6 +26,7 @@ contract TestnetToken is ERC20, Ownable {
 
     constructor(string memory n, string memory s, uint8 d, uint256 faucetAmount, address owner_)
         ERC20(n, s)
+        ERC20Permit(n)
         Ownable(owner_)
     {
         _dec = d;

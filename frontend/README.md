@@ -62,5 +62,7 @@ de build vacíos (los toma de `netlify.toml`).
 ## Pendiente para mainnet
 
 - Cargar las direcciones del despliegue en `config.js` (entrada 42161) y `BIETIX_ROUTER_42161` en Netlify.
-- Un proveedor de RPC propio en lugar del nodo público `arb1.arbitrum.io` (y sumarlo a `connect-src`).
+- RPC: Alchemy (app "bietix-web", limitada a bietix.com) ya configurado para Arbitrum One.
+- Firma única (permit) en testnet: activar `permit: true` en el USDC de prueba después del próximo despliegue
+  (los tokens de prueba actuales no tienen `permit`).
 - Agregar Odos como agregador de respaldo.

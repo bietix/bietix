@@ -44,6 +44,10 @@ contract KyberForkTest is ArbitrumForkBase {
         _roundTripKyber(USDT, 1_000e6);
     }
 
+    function test_kyber_buyAndSell_USDC_10k() public onlyKyber {
+        _roundTripKyber(USDC, 10_000e6);
+    }
+
     function _roundTripKyber(address stable, uint256 amountIn) internal {
         uint256 shares = _kyberBuy(stable, amountIn);
         uint256 out = _kyberSell(stable, shares);
@@ -61,7 +65,8 @@ contract KyberForkTest is ArbitrumForkBase {
         uint256 outEth;
         (steps[0], outBtc) = _kyberStep(stable, WBTC, net / 2);
         (steps[1], outEth) = _kyberStep(stable, WETH, net - net / 2);
-        uint256 minShares = router.sharesFor(outBtc, outEth) * (10_000 - SLIPPAGE_BPS) / 10_000;
+        uint256 quotedShares = router.sharesFor(outBtc, outEth);
+        uint256 minShares = quotedShares * (10_000 - SLIPPAGE_BPS) / 10_000;
 
         vm.startPrank(alice);
         IERC20(stable).approve(address(router), amountIn);
@@ -69,6 +74,8 @@ contract KyberForkTest is ArbitrumForkBase {
         vm.stopPrank();
         assertGt(shares, 0);
         _assertRouterClean(stable);
+        // Si lo ejecutado queda por debajo de lo cotizado, la diferencia es por el desfase del fork, no de la ruta.
+        _logSlip("Compra: ejecutado vs cotizado (bps, + = peor)", quotedShares, shares);
 
         uint256 paidUsd = guard.stableValueUsd(stable, amountIn);
         uint256 gotUsd = guard.indexPriceUsd(unitBtc, unitEth) * shares / 1e18;
@@ -93,6 +100,8 @@ contract KyberForkTest is ArbitrumForkBase {
         out = router.sell(shares, stable, minOut, steps, block.timestamp, alice);
         vm.stopPrank();
         _assertRouterClean(stable);
+        uint256 quotedNet = gross - (gross * router.sellFeeBps() + 9_999) / 10_000;
+        _logSlip("Venta: ejecutado vs cotizado (bps, + = peor)", quotedNet, out);
     }
 
     /// @dev Pide la ruta a KyberSwap (con el Router como emisor y receptor) vía script/kyber/route.mjs.
@@ -112,6 +121,11 @@ contract KyberForkTest is ArbitrumForkBase {
         assertEq(to, KYBER_ROUTER, "destino inesperado");
         step = BietixRouter.SwapStep({target: to, tokenIn: tokenIn, amountIn: amountIn, data: data});
         amountOut = out;
+    }
+
+    function _logSlip(string memory what, uint256 quoted, uint256 got) internal pure {
+        if (got >= quoted) console2.log(what, uint256(0));
+        else console2.log(what, (quoted - got) * 10_000 / quoted);
     }
 
     function _assertRouterClean(address stable) internal view {

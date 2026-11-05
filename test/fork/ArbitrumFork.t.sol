@@ -9,6 +9,12 @@ import {noFeeds, noStables, noAddresses} from "../utils/Empty.sol";
 import {BietixRouter} from "../../src/BietixRouter.sol";
 import {AggregatorV3Interface} from "../../src/interfaces/AggregatorV3Interface.sol";
 
+/// @notice Partes de EIP-2612 que expone el USDC nativo de Arbitrum.
+interface IUSDCPermit {
+    function nonces(address owner) external view returns (uint256);
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+}
+
 /// @notice Interfaz mínima de SwapRouter02 de Uniswap V3.
 interface ISwapRouter02 {
     struct ExactInputParams {
@@ -191,6 +197,52 @@ contract ArbitrumForkTest is ArbitrumForkBase {
         // el vault sigue totalmente respaldado después de la salida
         assertGe(IERC20(WBTC).balanceOf(address(vault)), vault.totalSupply() * unitBtc / 1e18);
         assertGe(IERC20(WETH).balanceOf(address(vault)), vault.totalSupply() * unitEth / 1e18);
+    }
+
+    /// Compra con firma única usando el `permit` real del USDC nativo de Arbitrum (FiatToken, versión "2").
+    function test_fork_buyWithPermit_realUSDC() public onlyFork {
+        (address user, uint256 pk) = makeAddrAndKey("permitUser");
+        uint256 amountIn = 1_000e6;
+        deal(USDC, user, amountIn);
+        BietixRouter.Permit memory p = _signUsdcPermit(pk, user, amountIn);
+        BietixRouter.SwapStep[] memory steps = _usdcBuySteps(amountIn);
+
+        vm.prank(user);
+        uint256 shares = router.buyWithPermit(USDC, amountIn, 1, steps, block.timestamp, user, p);
+        assertGt(shares, 0);
+        assertEq(IERC20(USDC).allowance(user, address(router)), 0);
+        assertEq(IERC20(USDC).balanceOf(address(router)), 0);
+    }
+
+    function _usdcBuySteps(uint256 amountIn) internal view returns (BietixRouter.SwapStep[] memory steps) {
+        uint256 net = amountIn - (amountIn * router.buyFeeBps() + 9_999) / 10_000;
+        steps = new BietixRouter.SwapStep[](2);
+        steps[0] = _uniStep(USDC, net / 2, _pathToBtc(USDC));
+        steps[1] = _uniStep(USDC, net - net / 2, _pathToEth(USDC));
+    }
+
+    function _signUsdcPermit(uint256 pk, address user, uint256 value)
+        internal
+        view
+        returns (BietixRouter.Permit memory p)
+    {
+        uint256 permitDeadline = block.timestamp + 1 hours;
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256(
+                    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+                ),
+                user,
+                address(router),
+                value,
+                IUSDCPermit(USDC).nonces(user),
+                permitDeadline
+            )
+        );
+        bytes32 digest =
+            keccak256(abi.encodePacked("\x19\x01", IUSDCPermit(USDC).DOMAIN_SEPARATOR(), structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
+        p = BietixRouter.Permit({value: value, deadline: permitDeadline, v: v, r: r, s: s});
     }
 
     // ═══════════════════════════════ Ayudas ═══════════════════════════════

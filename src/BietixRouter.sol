@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {
     AccessControlDefaultAdminRules
 } from "@openzeppelin/contracts/access/extensions/AccessControlDefaultAdminRules.sol";
@@ -26,6 +27,15 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
     uint256 internal constant BPS = 10_000;
     uint256 public constant MAX_FEE_BPS = 100; // 1%
     uint256 public constant SELL_WINDOW = 1 days;
+
+    /// @notice Autorización EIP-2612 firmada por el usuario (ver `buyWithPermit`).
+    struct Permit {
+        uint256 value;
+        uint256 deadline;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+    }
 
     /// @notice Un paso de swap: el Router aprueba `amountIn` de `tokenIn` a `target` y lo llama con `data`.
     /// @dev `target` debe estar en lista blanca y ser también quien toma los fondos (router del agregador).
@@ -165,6 +175,45 @@ contract BietixRouter is AccessControlDefaultAdminRules, ReentrancyGuard {
         uint256 deadline,
         address receiver
     ) external nonReentrant returns (uint256 shares) {
+        shares = _buy(stable, amountIn, minShares, steps, deadline, receiver);
+    }
+
+    /// @notice Igual que `buy`, pero con la autorización firmada (EIP-2612) en la misma transacción: el usuario
+    ///         firma una sola vez. Solo para stablecoins que implementan `permit` (USDC; USDT no).
+    /// @dev Si la firma ya se usó (alguien la copió del mempool y llamó a `permit` antes), `permit` revierte;
+    ///      se ignora ese error y se sigue, porque la autorización ya quedó hecha. Si no hay autorización,
+    ///      `safeTransferFrom` revierte igual. La firma solo puede autorizar a este Router.
+    /// @param permit_ autorización firmada por `msg.sender` a favor de este Router
+    function buyWithPermit(
+        address stable,
+        uint256 amountIn,
+        uint256 minShares,
+        SwapStep[] calldata steps,
+        uint256 deadline,
+        address receiver,
+        Permit calldata permit_
+    ) external nonReentrant returns (uint256 shares) {
+        // Validar antes de llamar al token: nunca se llama a `permit` de un token que no está en lista blanca.
+        if (!isStable[stable]) revert StableNotAllowed(stable);
+        // La función ya es nonReentrant y la stable está en lista blanca: el aviso de reentrada no aplica.
+        // forge-lint: disable-start(reentrancy-no-eth)
+        try IERC20Permit(stable)
+            .permit(
+                msg.sender, address(this), permit_.value, permit_.deadline, permit_.v, permit_.r, permit_.s
+            ) {}
+            catch {}
+        shares = _buy(stable, amountIn, minShares, steps, deadline, receiver);
+        // forge-lint: disable-end(reentrancy-no-eth)
+    }
+
+    function _buy(
+        address stable,
+        uint256 amountIn,
+        uint256 minShares,
+        SwapStep[] calldata steps,
+        uint256 deadline,
+        address receiver
+    ) internal returns (uint256 shares) {
         // 1. Validaciones
         if (paused || buyPaused) revert IsPaused();
         if (!isStable[stable]) revert StableNotAllowed(stable);
