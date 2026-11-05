@@ -1,0 +1,74 @@
+name: monitoreo
+
+# Chequeo de salud cada 15 minutos (solo lectura: no usa billeteras ni claves privadas).
+# Si algo falla, abre un issue "Alerta de monitoreo" en el repositorio (GitHub te avisa por mail y en la app).
+# Cuando todo vuelve a estar bien, lo cierra solo. Ver docs/manual-de-incidentes.md.
+#
+# Secreto opcional: ARBITRUM_RPC_URL (app "bietix-dev" de Alchemy) para Arbitrum One.
+# Mientras Bietix no esté desplegado en mainnet, ese chequeo termina en "nada que revisar".
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  health:
+    if: github.repository == 'bietix/bietix'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - chain: 421614
+            name: Arbitrum Sepolia (testnet)
+            rpc_secret: ""
+          - chain: 42161
+            name: Arbitrum One
+            rpc_secret: ARBITRUM_RPC_URL
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Chequeo de salud
+        id: health
+        env:
+          CHAIN_ID: ${{ matrix.chain }}
+          RPC_URL: ${{ matrix.rpc_secret && secrets[matrix.rpc_secret] || '' }}
+          REPORT_FILE: report.md
+        run: |
+          set +e
+          node script/monitor/health.mjs
+          echo "level=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Abrir, actualizar o cerrar la alerta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEVEL: ${{ steps.health.outputs.level }}
+          TITLE: "Alerta de monitoreo: ${{ matrix.name }}"
+        run: |
+          gh label create alerta --color B60205 --description "Monitoreo automático" 2>/dev/null || true
+          OPEN=$(gh issue list --label alerta --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')
+          if [ "$LEVEL" != "0" ]; then
+            [ -f report.md ] || echo "El chequeo no pudo correr (¿RPC caído?). Ver el registro de la ejecución: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > report.md
+            { cat report.md; echo; echo "Qué hacer: ver docs/manual-de-incidentes.md"; } > body.md
+            if [ -z "$OPEN" ]; then
+              gh issue create --title "$TITLE" --label alerta --body-file body.md
+            else
+              gh issue edit "$OPEN" --body-file body.md
+            fi
+          elif [ "$LEVEL" = "0" ] && [ -n "$OPEN" ]; then
+            gh issue close "$OPEN" --comment "Resuelto: el último chequeo dio todo OK ($(date -u +%FT%TZ))."
+          fi

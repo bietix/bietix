@@ -57,6 +57,8 @@ jobs:
           node-version: 22
       - name: Pruebas del intermediario con KyberSwap
         run: node --test frontend/netlify/lib/*.test.mjs
+      - name: Pruebas del monitoreo
+        run: node --test script/monitor/*.test.mjs
       - name: Sintaxis del sitio
         run: node --check frontend/app.js && node --check frontend/config.js
 
