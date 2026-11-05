@@ -19,6 +19,8 @@ export const NETWORKS = {
       WETH: { address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", decimals: 18 },
     },
   },
+  // Arbitrum Sepolia, despliegue v2 (5 de noviembre de 2026): código final con nombre Bietix, GuardianCanceller,
+  // firma única y KyberSwap. El despliegue v1 (DUOX) sigue en la red pero el sitio ya no lo usa (rama testnet-v1).
   421614: {
     name: "Arbitrum Sepolia",
     testnet: true,
@@ -27,17 +29,18 @@ export const NETWORKS = {
     explorer: "https://sepolia.arbiscan.io",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     contracts: {
-      vault: "0x0ed2aDfbf3865Ba97f267285E8Dbc94d3878375C",
-      router: "0x70AFAc4d779Df2113d33E1C3ADcBBA6143f8C172",
-      oracle: "0x129EDb57262d81C9BD01D4039B68b9cBc827d5Fe",
-      timelock: "0x2Dbf5A456bf866f633725828dCC5Eb80a8d75051",
-      dex: "0x54d1260c7915eFa1EB1293c30A02119738557472",
+      vault: "0xBdf2095539DaE97d6487918c95f72c2B655C5Ca2",
+      router: "0xf73A2CfF09C0625c6Bbea645320a87A96b90C2C0",
+      oracle: "0x934b014e67f3a9d8893a038ba2134E3783B32c46",
+      timelock: "0x6C62eA51D10d84b9F1dab1f3f0724F3918EfFE0C",
+      canceller: "0xF48f813909f860f88175d98E5bD8A12D08B4bCfe",
+      dex: "0x8cF1FDfF2541A12957Ca36a696eb9FB1bdAA2eB7",
     },
     tokens: {
-      USDC: { address: "0x6dE2152c2a327Ca5561D2CFF6e15380744605f76", decimals: 6 },
-      USDT: { address: "0xc2dDa205D51A042cB47888354904d004BA97F3F7", decimals: 6 },
-      WBTC: { address: "0x14aaa611DE9e9142658305A74386DbBfFBeE82A5", decimals: 8 },
-      WETH: { address: "0x95A485613d0A1750C58a322b8BC5509803685Ba3", decimals: 18 },
+      USDC: { address: "0xDda1fE23Dc0a8F563dC76AB3b2f6863d3Ed98c33", decimals: 6, permit: true }, // firma única
+      USDT: { address: "0xd15c657E733aDB37b5A2980dF36816899C12A5Ae", decimals: 6 },
+      WBTC: { address: "0x7aaDBE9361396BB6851173dD7BAbCA61c98362Aa", decimals: 8 },
+      WETH: { address: "0xF40A9aA9A3B347EB82a585441d8b25c3A4495270", decimals: 18 },
     },
   },
   // Red local (anvil) para pruebas: las direcciones se completan con las del despliegue local.
