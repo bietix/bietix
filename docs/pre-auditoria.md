@@ -11,7 +11,7 @@ Antes de una auditoría externa se revisan los cuatro puntos que los auditores m
 | Código muerto | Ninguno (se eliminó una comprobación imposible en `_sharesFor`) |
 | Versión del compilador | Fija: `pragma solidity 0.8.38;` en todos los archivos |
 | Cobertura de `src/` | **100%** de líneas, sentencias, ramas y funciones |
-| Pruebas | 175 pasan, 0 fallan (12 omitidas: fork, necesitan RPC) |
+| Pruebas | 182 pasan, 0 fallan (12 omitidas: fork, necesitan RPC) |
 | Slither | 0 resultados |
 | Aderyn | 0 altos · 9 categorías de bajos, todas revisadas (abajo) |
 | Mythril | 0 hallazgos en Vault, Router y OracleGuard · 3 bajos de diseño en GuardianCanceller |
@@ -109,6 +109,27 @@ Los permisos que existen están acotados. Lo que aumenta el riesgo (subir comisi
 **¿Hay comisión por transferencia?** No. BIETIX es un ERC-20 estándar y las transferencias mueven exactamente el monto pedido (lo prueba `test_transfer_movesExactAmountAndEmits`). Las comisiones se cobran solo al acuñar (In-Kind) y al comprar o vender por el Router. Por eso el token es compatible con cualquier DEX, billetera o protocolo. Además, el Vault y el Router **rechazan** tokens con comisión al recibir fondos: miden el saldo antes y después y exigen que llegue exactamente lo pedido.
 
 **¿Cumple el estándar ERC-20?** Sí. Hereda `ERC20` y `ERC20Permit` de OpenZeppelin v5.1 sin modificaciones. Tiene todas las funciones obligatorias de EIP-20 (`totalSupply`, `balanceOf`, `transfer`, `transferFrom`, `approve`, `allowance`), los eventos `Transfer` y `Approval`, los metadatos (`name`, `symbol`, `decimals` = 18) y `permit` (EIP-2612). Lo prueba `ERC20Compliance.t.sol`.
+
+## 5. Lista de control de "tax tokens" (impuesto, quema automática, acuñación continua)
+
+BIETIX **no es un tax token**. No cobra impuesto en las transferencias, no tiene quema automática y no tiene acuñación continua ni inflación. Las comisiones existen, pero solo en las funciones de entrada y salida del protocolo (`mintInKind`, `buy`, `sell`), nunca dentro de `transfer`. Pruebas: `test/unit/TokenMechanics.t.sol`.
+
+| Punto de la lista | Cómo aplica a Bietix | Evidencia |
+| --- | --- | --- |
+| Redondeo en el cálculo de comisiones | Se multiplica antes de dividir con `Math.mulDiv` (sin desbordes ni pérdida de precisión). Las comisiones redondean hacia arriba y los pagos hacia abajo, siempre a favor del protocolo, así que el vault nunca pierde ni una unidad | Fuzz de redondeo e ida y vuelta; invariante de respaldo |
+| Compatibilidad con DEX | Total: `transfer` es el de OpenZeppelin sin cambios. No hace falta `...SupportingFeeOnTransferTokens` | `test_transfer100_receiverGets100_noTaxAnywhere` |
+| Tope de comisión en código | Sí, constante e imposible de cambiar: 1% en el vault (`MAX_MINT_FEE_BPS`) y 1% en compra y venta del Router (`MAX_FEE_BPS`). Subirla dentro del tope requiere el Timelock | Pruebas de `setMintFee`, `setBuyFee`, `setSellFee` y constructores |
+| Listas de exentos | No aplica: no hay impuesto del que eximir | — |
+| Quema y `totalSupply` | Solo se quema al canjear (`redeemInKind`), con `_burn` de OpenZeppelin: baja el saldo y el `totalSupply` y emite `Transfer` a `address(0)`. No hay quema en transferencias ni en funciones del sistema | `test_tenRedeems_supplyDropsExactly`, `test_tenTransfers_supplyUnchanged` |
+| Acuñación protegida | **No existe una función `mint` de administrador.** La única forma de crear tokens es `mintInKind`, que cualquiera puede usar pero solo depositando en la misma transacción el WBTC y el WETH exactos que los respaldan. Sin colateral revierte, también para el administrador | `test_noAdminMintFunctionExists`, `test_mintWithoutCollateral_reverts`, `test_adminCannotMintWithoutCollateralOrAboveCap`, `testFuzz_everyMintIsFullyBacked` |
+| Tope de suministro | `supplyCap` limita la emisión total. No es política monetaria: cada token nuevo trae su colateral, así que no hay inflación. El tope es un límite de riesgo que el guardián puede bajar al instante y el Timelock subir | Invariante `totalSupply ≤ supplyCap` |
+| Emisión por tiempo | No hay emisión por tiempo ni recompensas | — |
+
+**¿Las comisiones se cobran en el propio token y se venden automáticamente?** No, y nunca se venden de forma automática:
+- La comisión **In-Kind** se cobra en WBTC y WETH y va directo a tesorería en la misma transacción.
+- Las comisiones del **Router** se cobran en la stablecoin del usuario (USDC o USDT) y van directo a tesorería: en la compra se descuentan antes de los swaps y en la venta sobre lo obtenido.
+
+Ningún contrato guarda comisiones ni hace swaps para pagarlas, así que no hay un flujo de "vender impuestos" que pueda ser reentrado o manipulado.
 
 ## Cómo repetir esta revisión
 
