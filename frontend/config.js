@@ -19,8 +19,8 @@ export const NETWORKS = {
       WETH: { address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", decimals: 18 },
     },
   },
-  // Arbitrum Sepolia, despliegue v2 (5 de noviembre de 2026): código final con nombre Bietix, GuardianCanceller,
-  // firma única y KyberSwap. El despliegue v1 (DUOX) sigue en la red pero el sitio ya no lo usa (rama testnet-v1).
+  // Arbitrum Sepolia, despliegue v3 (5 de noviembre de 2026) desde el commit 1eb6c5a: el código que va a auditoría.
+  // Los despliegues v1 (DUOX) y v2 siguen en la red, pero el sitio ya no los usa.
   421614: {
     name: "Arbitrum Sepolia",
     testnet: true,
@@ -29,18 +29,18 @@ export const NETWORKS = {
     explorer: "https://sepolia.arbiscan.io",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     contracts: {
-      vault: "0xBdf2095539DaE97d6487918c95f72c2B655C5Ca2",
-      router: "0xf73A2CfF09C0625c6Bbea645320a87A96b90C2C0",
-      oracle: "0x934b014e67f3a9d8893a038ba2134E3783B32c46",
-      timelock: "0x6C62eA51D10d84b9F1dab1f3f0724F3918EfFE0C",
-      canceller: "0xF48f813909f860f88175d98E5bD8A12D08B4bCfe",
-      dex: "0x8cF1FDfF2541A12957Ca36a696eb9FB1bdAA2eB7",
+      vault: "0x6e2A2fB142CedEE6c9D13cCEB938135E51772c91",
+      router: "0xB9c6346cD6266E2579C57CF0e1264463471536D2",
+      oracle: "0xf1a5Db209c421C910C5fe047C4F6c067158DeBcd",
+      timelock: "0x138A4C4CA973744Ef76388Bec1285474AdD1eb95",
+      canceller: "0x09a2A33E18f956e77dD01BDf16eFA55D2F49F6E0",
+      dex: "0x036Ae427dA4035EF6964a023FF6fbDE84b09269D",
     },
     tokens: {
-      USDC: { address: "0xDda1fE23Dc0a8F563dC76AB3b2f6863d3Ed98c33", decimals: 6, permit: true }, // firma única
-      USDT: { address: "0xd15c657E733aDB37b5A2980dF36816899C12A5Ae", decimals: 6 },
-      WBTC: { address: "0x7aaDBE9361396BB6851173dD7BAbCA61c98362Aa", decimals: 8 },
-      WETH: { address: "0xF40A9aA9A3B347EB82a585441d8b25c3A4495270", decimals: 18 },
+      USDC: { address: "0x4Ca8B1d2f0093f09e2B16992848E70cEc6937a90", decimals: 6, permit: true }, // firma única
+      USDT: { address: "0x61FE8e49dc5133ecC223e103f895B45CDCCd090a", decimals: 6 },
+      WBTC: { address: "0x7D35BF4A5dfc6Cbc87B8eca96B4e1FD8d8705f90", decimals: 8 },
+      WETH: { address: "0xe795332d67Ca0cfFdE55E9Fe65f0E2919b3A9fA8", decimals: 18 },
     },
   },
   // Red local (anvil) para pruebas: las direcciones se completan con las del despliegue local.
