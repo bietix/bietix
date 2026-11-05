@@ -12,6 +12,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /// @title BietixVault — núcleo del índice BIETIX
+/// @author Bietix
 /// @notice Token ERC-20 y custodia en un solo contrato. Cada token (1e18 unidades mínimas)
 ///         representa siempre exactamente UNIT_BTC del activo BTC y UNIT_ETH del activo ETH.
 /// @dev Diseño (ver Especificaciones Técnicas, secciones 1.3, 1.7 y 2.3):
@@ -30,7 +31,9 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
     bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
     // ───────────────────────────── Constantes ─────────────────────────────
+    /// @notice Unidades mínimas de un token entero (el token tiene 18 decimales).
     uint256 public constant SHARE_UNIT = 1e18;
+    /// @notice Base de los puntos básicos: 10.000 bps = 100%.
     uint256 public constant BPS = 10_000;
     /// @notice Techo fijo de la comisión In-Kind de acuñación (1%).
     uint256 public constant MAX_MINT_FEE_BPS = 100;
@@ -38,7 +41,9 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
     uint256 public constant MIN_MINT_SHARES = 1e16;
 
     // ───────────────────────────── Inmutables ─────────────────────────────
+    /// @notice Activo BTC del índice (WBTC). No cambia nunca.
     IERC20 public immutable ASSET_BTC;
+    /// @notice Activo ETH del índice (WETH). No cambia nunca.
     IERC20 public immutable ASSET_ETH;
     /// @notice Unidades mínimas de ASSET_BTC por 1 token entero (ej. 10_000 = 0,0001 BTC con 8 decimales).
     uint256 public immutable UNIT_BTC;
@@ -46,12 +51,24 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
     uint256 public immutable UNIT_ETH;
 
     // ──────────────────────── Parámetros ajustables ───────────────────────
+    /// @notice Dirección que recibe la comisión de acuñación In-Kind.
     address public treasury;
+    /// @notice Comisión de acuñación In-Kind en bps, cobrada sobre cada activo (tope: MAX_MINT_FEE_BPS).
     uint256 public mintFeeBps;
+    /// @notice Máximo de tokens en circulación (unidades mínimas).
     uint256 public supplyCap;
+    /// @notice Si es true, no se puede acuñar. El canje In-Kind nunca se pausa.
     bool public mintPaused;
 
     // ────────────────────────────── Eventos ──────────────────────────────
+    /// @notice Se acuñaron `shares` para `receiver` contra activos aportados por `caller`.
+    /// @param caller quien aportó los activos
+    /// @param receiver quien recibe los tokens
+    /// @param shares tokens acuñados (unidades mínimas)
+    /// @param btcIn BTC que quedó en el vault
+    /// @param ethIn ETH que quedó en el vault
+    /// @param feeBtc comisión en BTC enviada a tesorería
+    /// @param feeEth comisión en ETH enviada a tesorería
     event Minted(
         address indexed caller,
         address indexed receiver,
@@ -61,27 +78,61 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
         uint256 feeBtc,
         uint256 feeEth
     );
+    /// @notice Se quemaron `shares` de `caller` y se enviaron los activos a `receiver`.
+    /// @param caller dueño de los tokens quemados
+    /// @param receiver quien recibe los activos
+    /// @param shares tokens quemados (unidades mínimas)
+    /// @param btcOut BTC enviado
+    /// @param ethOut ETH enviado
     event Redeemed(
         address indexed caller, address indexed receiver, uint256 shares, uint256 btcOut, uint256 ethOut
     );
+    /// @notice Se pausó la acuñación.
+    /// @param by cuenta que la pausó
     event MintPaused(address indexed by);
+    /// @notice Se reanudó la acuñación.
+    /// @param by cuenta que la reanudó
     event MintUnpaused(address indexed by);
+    /// @notice Cambió el límite de emisión.
+    /// @param oldCap límite anterior
+    /// @param newCap límite nuevo
     event SupplyCapChanged(uint256 oldCap, uint256 newCap);
+    /// @notice Cambió la comisión de acuñación In-Kind.
+    /// @param oldFeeBps comisión anterior (bps)
+    /// @param newFeeBps comisión nueva (bps)
     event MintFeeChanged(uint256 oldFeeBps, uint256 newFeeBps);
+    /// @notice Cambió la tesorería.
+    /// @param oldTreasury tesorería anterior
+    /// @param newTreasury tesorería nueva
     event TreasuryChanged(address indexed oldTreasury, address indexed newTreasury);
+    /// @notice Se rescataron tokens ajenos al índice enviados por error.
+    /// @param token token rescatado
+    /// @param amount cantidad
+    /// @param to destino (tesorería)
     event Swept(address indexed token, uint256 amount, address indexed to);
 
     // ────────────────────────────── Errores ──────────────────────────────
+    /// @notice Se pasó la dirección cero donde no se permite.
     error ZeroAddress();
+    /// @notice Configuración de despliegue inválida (activos iguales o unidades en cero).
     error InvalidConfig();
+    /// @notice La acuñación está pausada.
     error MintIsPaused();
+    /// @notice La acuñación es menor que MIN_MINT_SHARES.
     error BelowMinimum();
+    /// @notice Se pidió canjear 0 tokens.
     error ZeroShares();
+    /// @notice La acuñación superaría el límite de emisión.
     error SupplyCapExceeded();
+    /// @notice La comisión supera MAX_MINT_FEE_BPS.
     error FeeTooHigh();
+    /// @notice `decreaseSupplyCap` con un valor que no es menor al actual.
     error CapNotLower();
+    /// @notice `increaseSupplyCap` con un valor que no es mayor al actual.
     error CapNotHigher();
+    /// @notice Se intentó rescatar WBTC o WETH, que son el colateral.
     error ProtectedAsset();
+    /// @notice No llegó exactamente el monto pedido (token con comisión de transferencia).
     error UnexpectedTransferAmount();
 
     /// @notice Configuración de despliegue (agrupada en un struct para mantener el constructor simple).
@@ -99,6 +150,10 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
         uint256 supplyCap;
     }
 
+    /// @notice Despliega el vault con activos y unidades fijas para siempre.
+    /// @param name_ nombre del token
+    /// @param symbol_ símbolo del token
+    /// @param c configuración inicial (ver `Config`)
     constructor(string memory name_, string memory symbol_, Config memory c)
         ERC20(name_, symbol_)
         ERC20Permit(name_)
@@ -131,6 +186,10 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
 
     /// @notice Acuña `shares` aportando el BTC/ETH exacto (redondeo hacia arriba) más la comisión In-Kind.
     /// @dev La comisión va directo a tesorería; nunca queda en el vault.
+    /// @param shares tokens a acuñar (unidades mínimas, al menos MIN_MINT_SHARES)
+    /// @param receiver quien recibe los tokens
+    /// @return btcIn BTC que queda en el vault (sin contar la comisión)
+    /// @return ethIn ETH que queda en el vault (sin contar la comisión)
     function mintInKind(uint256 shares, address receiver)
         external
         nonReentrant
@@ -159,6 +218,10 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
 
     /// @notice Quema `shares` del llamador y le envía a `receiver` el BTC/ETH correspondiente (redondeo hacia abajo).
     /// @dev No pausable, sin comisión y sin mínimo: la salida siempre está abierta.
+    /// @param shares tokens a quemar (unidades mínimas)
+    /// @param receiver quien recibe los activos
+    /// @return btcOut BTC enviado
+    /// @return ethOut ETH enviado
     function redeemInKind(uint256 shares, address receiver)
         external
         nonReentrant
@@ -178,6 +241,11 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
 
     // ══════════════════════════════ Vistas ══════════════════════════════
 
+    /// @notice Activos que respaldan `shares` tokens.
+    /// @param shares cantidad de tokens (unidades mínimas)
+    /// @param rounding Ceil para acuñar, Floor para canjear
+    /// @return btc unidades mínimas de ASSET_BTC
+    /// @return eth unidades mínimas de ASSET_ETH
     function assetsForShares(uint256 shares, Math.Rounding rounding)
         public
         view
@@ -188,6 +256,11 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
     }
 
     /// @notice Total que el llamador debe aprobar para acuñar `shares` (activos + comisión).
+    /// @param shares tokens a acuñar (unidades mínimas)
+    /// @return btcIn BTC que queda en el vault
+    /// @return ethIn ETH que queda en el vault
+    /// @return feeBtc comisión en BTC (se aprueba aparte de btcIn)
+    /// @return feeEth comisión en ETH (se aprueba aparte de ethIn)
     function previewMint(uint256 shares)
         external
         view
@@ -197,6 +270,10 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
         (feeBtc, feeEth) = _fees(btcIn, ethIn);
     }
 
+    /// @notice Activos que se recibirían al canjear `shares`.
+    /// @param shares tokens a canjear (unidades mínimas)
+    /// @return btcOut BTC a recibir
+    /// @return ethOut ETH a recibir
     function previewRedeem(uint256 shares) external view returns (uint256 btcOut, uint256 ethOut) {
         return assetsForShares(shares, Math.Rounding.Floor);
     }
@@ -216,6 +293,7 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
     }
 
     /// @notice Bajar el límite reduce riesgo → inmediato.
+    /// @param newCap límite nuevo, menor al actual
     function decreaseSupplyCap(uint256 newCap) external onlyRole(GUARDIAN_ROLE) {
         if (newCap >= supplyCap) revert CapNotLower();
         emit SupplyCapChanged(supplyCap, newCap);
@@ -223,12 +301,15 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
     }
 
     /// @notice Subir el límite aumenta riesgo → solo el administrador (Timelock).
+    /// @param newCap límite nuevo, mayor al actual
     function increaseSupplyCap(uint256 newCap) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newCap <= supplyCap) revert CapNotHigher();
         emit SupplyCapChanged(supplyCap, newCap);
         supplyCap = newCap;
     }
 
+    /// @notice Cambia la comisión de acuñación In-Kind (solo el Timelock, hasta MAX_MINT_FEE_BPS).
+    /// @param newFeeBps comisión nueva en bps
     function setMintFee(uint256 newFeeBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newFeeBps > MAX_MINT_FEE_BPS) revert FeeTooHigh();
         uint256 oldFee = mintFeeBps;
@@ -236,6 +317,8 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
         emit MintFeeChanged(oldFee, newFeeBps);
     }
 
+    /// @notice Cambia la tesorería (solo el Timelock).
+    /// @param newTreasury tesorería nueva
     function setTreasury(address newTreasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newTreasury == address(0)) revert ZeroAddress();
         emit TreasuryChanged(treasury, newTreasury);
@@ -244,11 +327,14 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
 
     /// @notice El Safe puede quitarle el rol a un guardián al instante (por ejemplo, si su llave se filtró).
     ///         Nombrar uno nuevo requiere el administrador (Timelock).
+    /// @param account guardián a quitar
     function revokeGuardian(address account) external onlyRole(UNPAUSER_ROLE) {
         _revokeRole(GUARDIAN_ROLE, account);
     }
 
     /// @notice Rescata tokens enviados por error. Nunca puede tocar el colateral.
+    /// @dev Lo puede llamar el Timelock o el Safe. Todo va a tesorería.
+    /// @param token token a rescatar (no puede ser ASSET_BTC ni ASSET_ETH)
     function sweep(IERC20 token) external {
         if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(UNPAUSER_ROLE, msg.sender)) {
             revert AccessControlUnauthorizedAccount(msg.sender, UNPAUSER_ROLE);
@@ -263,6 +349,7 @@ contract BietixVault is ERC20, ERC20Permit, AccessControlDefaultAdminRules, Reen
 
     // ═════════════════════════════ Internas ═════════════════════════════
 
+    /// @dev Comisión In-Kind sobre cada activo, redondeada hacia arriba (a favor del protocolo).
     function _fees(uint256 btc, uint256 eth) internal view returns (uint256 feeBtc, uint256 feeEth) {
         uint256 fee = mintFeeBps;
         if (fee == 0) return (0, 0);

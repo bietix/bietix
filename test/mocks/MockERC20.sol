@@ -19,6 +19,11 @@ contract MockERC20 is ERC20, ERC20Permit {
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
     }
+
+    /// @notice Quita saldo a cualquiera, sin permiso: simula un token con rebase negativo o malicioso.
+    function slash(address from, uint256 amount) external {
+        _burn(from, amount);
+    }
 }
 
 /// @notice Token que se queda con un 1% en cada transferencia (no debe ser aceptado por el vault).
