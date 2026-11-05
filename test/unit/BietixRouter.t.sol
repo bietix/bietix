@@ -681,6 +681,105 @@ contract BietixRouterTest is SystemTestBase {
         assertEq(router.sellUpdatedAt(), later);
     }
 
+    // ─────────────────── Compra con firma única (permit, EIP-2612) ───────────────────
+
+    bytes32 internal constant PERMIT_TYPEHASH =
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+
+    function _signPermit(uint256 pk, address owner, uint256 value, uint256 permitDeadline)
+        internal
+        view
+        returns (BietixRouter.Permit memory p)
+    {
+        bytes32 structHash = keccak256(
+            abi.encode(PERMIT_TYPEHASH, owner, address(router), value, usdc.nonces(owner), permitDeadline)
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", usdc.DOMAIN_SEPARATOR(), structHash));
+        (uint8 v, bytes32 r, bytes32 sig) = vm.sign(pk, digest);
+        p = BietixRouter.Permit({value: value, deadline: permitDeadline, v: v, r: r, s: sig});
+    }
+
+    function test_buyWithPermit_singleTransaction() public {
+        (address user, uint256 pk) = makeAddrAndKey("permitUser");
+        usdc.mint(user, 1_000e6); // sin approve previo
+        BietixRouter.Permit memory p = _signPermit(pk, user, 1_000e6, block.timestamp + 1 hours);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 10);
+        vm.prank(user);
+        uint256 shares = router.buyWithPermit(address(usdc), 1_000e6, 0, steps, block.timestamp, user, p);
+        assertGt(shares, 0);
+        assertEq(vault.balanceOf(user), shares);
+        assertEq(usdc.allowance(user, address(router)), 0, "no queda autorizacion abierta");
+        _assertRouterClean();
+    }
+
+    /// Si alguien copia la firma del mempool y la usa primero, la compra del usuario igual se ejecuta.
+    function test_buyWithPermit_frontRunPermitDoesNotBlock() public {
+        (address user, uint256 pk) = makeAddrAndKey("permitUser");
+        usdc.mint(user, 1_000e6);
+        BietixRouter.Permit memory p = _signPermit(pk, user, 1_000e6, block.timestamp + 1 hours);
+        vm.prank(attacker);
+        usdc.permit(user, address(router), p.value, p.deadline, p.v, p.r, p.s);
+
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 10);
+        vm.prank(user);
+        uint256 shares = router.buyWithPermit(address(usdc), 1_000e6, 0, steps, block.timestamp, user, p);
+        assertGt(shares, 0);
+    }
+
+    /// La firma de otra persona no sirve: sin autorización válida la compra revierte.
+    function test_buyWithPermit_wrongSignerReverts() public {
+        (address user,) = makeAddrAndKey("permitUser");
+        (, uint256 otherPk) = makeAddrAndKey("otro");
+        usdc.mint(user, 1_000e6);
+        BietixRouter.Permit memory p = _signPermit(otherPk, user, 1_000e6, block.timestamp + 1 hours);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 10);
+        vm.prank(user);
+        vm.expectRevert(); // ERC20InsufficientAllowance
+        router.buyWithPermit(address(usdc), 1_000e6, 0, steps, block.timestamp, user, p);
+    }
+
+    /// Un atacante no puede usar la firma de otro: `permit` autoriza a `msg.sender`, no al firmante.
+    function test_buyWithPermit_cannotSpendSomeoneElsesSignature() public {
+        (address user, uint256 pk) = makeAddrAndKey("permitUser");
+        usdc.mint(user, 1_000e6);
+        usdc.mint(attacker, 1_000e6);
+        BietixRouter.Permit memory p = _signPermit(pk, user, 1_000e6, block.timestamp + 1 hours);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 10);
+        vm.prank(attacker);
+        vm.expectRevert();
+        router.buyWithPermit(address(usdc), 1_000e6, 0, steps, block.timestamp, attacker, p);
+        assertEq(usdc.balanceOf(user), 1_000e6, "los fondos del usuario no se tocan");
+    }
+
+    function test_buyWithPermit_rejectsTokenNotAllowedBeforeCallingIt() public {
+        BietixRouter.Permit memory p;
+        BietixRouter.SwapStep[] memory none = new BietixRouter.SwapStep[](0);
+        vm.expectRevert(abi.encodeWithSelector(BietixRouter.StableNotAllowed.selector, address(wbtc)));
+        router.buyWithPermit(address(wbtc), 1, 0, none, block.timestamp, alice, p);
+    }
+
+    /// Con una aprobación normal previa, `buyWithPermit` funciona aunque la firma no sirva (por ejemplo, USDT).
+    function test_buyWithPermit_fallsBackToExistingApproval() public {
+        _fund(alice, address(usdt), 1_000e6);
+        BietixRouter.Permit memory p; // firma vacía
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdt), 1_000e6, 10);
+        vm.prank(alice);
+        uint256 shares = router.buyWithPermit(address(usdt), 1_000e6, 0, steps, block.timestamp, alice, p);
+        assertGt(shares, 0);
+    }
+
+    function test_buyWithPermit_respectsPauses() public {
+        vm.prank(guardian);
+        router.pauseBuys();
+        (address user, uint256 pk) = makeAddrAndKey("permitUser");
+        usdc.mint(user, 1_000e6);
+        BietixRouter.Permit memory p = _signPermit(pk, user, 1_000e6, block.timestamp + 1 hours);
+        BietixRouter.SwapStep[] memory steps = _buySteps(address(usdc), 1_000e6, 10);
+        vm.prank(user);
+        vm.expectRevert(BietixRouter.IsPaused.selector);
+        router.buyWithPermit(address(usdc), 1_000e6, 0, steps, block.timestamp, user, p);
+    }
+
     // ─────────────────── Regresiones de la revisión interna ───────────────────
 
     /// M-1: una "venta" sin swaps (= canje In-Kind por el Router) ya no puede consumir el cupo diario.

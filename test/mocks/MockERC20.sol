@@ -2,12 +2,13 @@
 pragma solidity 0.8.38;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 
-/// @notice Token de prueba con decimales configurables y acuñación libre.
-contract MockERC20 is ERC20 {
+/// @notice Token de prueba con decimales configurables, acuñación libre y `permit` (EIP-2612).
+contract MockERC20 is ERC20, ERC20Permit {
     uint8 private immutable _dec;
 
-    constructor(string memory n, string memory s, uint8 d) ERC20(n, s) {
+    constructor(string memory n, string memory s, uint8 d) ERC20(n, s) ERC20Permit(n) {
         _dec = d;
     }
 

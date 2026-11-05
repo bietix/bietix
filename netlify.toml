@@ -29,7 +29,7 @@
   [headers.values]
     # Solo se ejecuta código propio del sitio y solo se conecta a los nodos de Arbitrum permitidos.
     # Si se agrega otra red o un agregador (por ejemplo la API de 0x), hay que sumar su dominio a connect-src.
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://sepolia-rollup.arbitrum.io https://arb1.arbitrum.io; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://sepolia-rollup.arbitrum.io https://arb1.arbitrum.io https://arb-mainnet.g.alchemy.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
     # Impide que otro sitio muestre esta página dentro de un marco (protección contra clickjacking).
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"

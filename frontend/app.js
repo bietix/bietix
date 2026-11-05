@@ -1,5 +1,5 @@
 import {
-  BrowserProvider, JsonRpcProvider, Contract, Interface, formatUnits, parseUnits, isError,
+  BrowserProvider, JsonRpcProvider, Contract, Interface, Signature, formatUnits, parseUnits, isError,
 } from "./vendor/ethers.min.js";
 import { NETWORKS, DEFAULT_CHAIN, DEFAULT_SLIPPAGE_BPS } from "./config.js";
 
@@ -9,6 +9,10 @@ const ERC20 = [
   "function allowance(address,address) view returns (uint256)",
   "function approve(address,uint256) returns (bool)",
   "function faucet()",
+  "function name() view returns (string)",
+  "function version() view returns (string)",
+  "function nonces(address) view returns (uint256)",
+  "function eip712Domain() view returns (bytes1,string,string,uint256,address,bytes32,uint256[])",
 ];
 const VAULT = [
   ...ERC20,
@@ -29,6 +33,7 @@ const ROUTER = [
   "function sharesFor(uint256,uint256) view returns (uint256)",
   "function buy(address,uint256,uint256,(address,address,uint256,bytes)[],uint256,address) returns (uint256)",
   "function sell(uint256,address,uint256,(address,address,uint256,bytes)[],uint256,address) returns (uint256)",
+  "function buyWithPermit(address,uint256,uint256,(address,address,uint256,bytes)[],uint256,address,(uint256,uint256,uint8,bytes32,bytes32)) returns (uint256)",
   "error IsPaused()", "error StableNotAllowed(address)", "error TargetNotAllowed(address)", "error InvalidStep()",
   "error Expired()", "error TradeTooLarge(uint256,uint256)", "error SellLimitExceeded(uint256,uint256)",
   "error InsufficientOutput(uint256,uint256)", "error SwapFailed(address)", "error BalanceMismatch(address)",
@@ -308,19 +313,57 @@ async function ensureAllowance(tokenAddr, spender, amount, label) {
   await (await t.approve(spender, amount, await gasOverrides())).wait();
 }
 
+// ─────────── Firma única (EIP-2612): autorizar y comprar en una sola transacción ───────────
+/** Dominio EIP-712 del token: se lee del contrato (EIP-5267) o, si no lo expone, de name() + version(). */
+async function permitDomain(tokenAddr) {
+  const t = c(tokenAddr, ERC20);
+  try {
+    const d = await t.eip712Domain();
+    return { name: d[1], version: d[2], chainId, verifyingContract: tokenAddr };
+  } catch {
+    const [name, version] = await Promise.all([t.name(), t.version().catch(() => "1")]);
+    return { name, version, chainId, verifyingContract: tokenAddr };
+  }
+}
+
+/** Pide la firma de autorización. Devuelve null si el usuario ya tiene autorización suficiente. */
+async function signPermit(stable, amount) {
+  const t = c(tokens[stable].address, ERC20);
+  if ((await t.allowance(account, net.contracts.router)) >= amount) return null;
+  const permitDeadline = BigInt(Math.floor(Date.now() / 1000) + 1200);
+  const value = {
+    owner: account, spender: net.contracts.router, value: amount,
+    nonce: await t.nonces(account), deadline: permitDeadline,
+  };
+  status(`Firmá la autorización de ${stable} en tu billetera (no cuesta gas)…`);
+  const sig = Signature.from(await signer.signTypedData(await permitDomain(tokens[stable].address), {
+    Permit: [
+      { name: "owner", type: "address" }, { name: "spender", type: "address" }, { name: "value", type: "uint256" },
+      { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" },
+    ],
+  }, value));
+  return [amount, permitDeadline, sig.v, sig.r, sig.s];
+}
+
 async function doBuy(ev) {
   ev.preventDefault();
   const q = await quoteBuy();
   if (!q) return;
   await run("buy-btn", async () => {
-    await ensureAllowance(tokens[q.stable].address, net.contracts.router, q.amountIn, q.stable);
+    // Con USDC alcanza una firma (permit); con USDT hace falta la aprobación clásica en dos pasos.
+    const permit = tokens[q.stable].permit ? await signPermit(q.stable, q.amountIn) : null;
+    if (!tokens[q.stable].permit) await ensureAllowance(tokens[q.stable].address, net.contracts.router, q.amountIn, q.stable);
     // Cotización nueva justo antes de firmar: las rutas del agregador vencen en segundos.
     status("Preparando la ruta de compra…");
     const f = (await quoteBuy()) || q;
     const steps = await Promise.all(f.ctxs.map((x) => swaps.step(x)));
     status("Confirmá la compra en tu billetera…");
     const router = c(net.contracts.router, ROUTER, signer);
-    const tx = await router.buy(tokens[f.stable].address, f.amountIn, f.minShares, steps, deadline(), account, await gasOverrides());
+    // La autorización firmada es por un monto exacto: si el usuario lo cambió mientras tanto, se frena.
+    if (permit && (f.amountIn !== q.amountIn || f.stable !== q.stable)) throw new Error("El monto cambió mientras firmabas. Probá de nuevo.");
+    const tx = permit
+      ? await router.buyWithPermit(tokens[q.stable].address, q.amountIn, f.minShares, steps, deadline(), account, permit, await gasOverrides())
+      : await router.buy(tokens[f.stable].address, f.amountIn, f.minShares, steps, deadline(), account, await gasOverrides());
     status("Comprando…");
     await tx.wait();
     $("buy-amount").value = "";
