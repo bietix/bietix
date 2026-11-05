@@ -41,12 +41,18 @@ const ROUTER = [
 ];
 const ORACLE = [
   "function indexPriceUsd(uint256,uint256) view returns (uint256)",
+  "function wbtcUsd() view returns (uint256)",
+  "function ethUsd() view returns (uint256)",
+  "function BTC_USD() view returns (bytes32)",
+  "function ETH_USD() view returns (bytes32)",
+  "function feedConfig(bytes32) view returns ((address feed, uint32 maxStaleness, uint8 decimals, uint96 minPrice, uint96 maxPrice))",
   "function basketValueUsd(uint256,uint256) view returns (uint256)",
   "function wrapperAlert() view returns (bool)",
   "function checkSequencer() view",
   "error SequencerDown()", "error GracePeriodNotOver()", "error StalePrice(bytes32)", "error WrapperDepegged()",
   "error StablePriceTooLow(address)", "error ExecutionWorseThanOracle(uint256,uint256)", "error PriceOutOfRange(bytes32)",
 ];
+const FEED = ["function latestRoundData() view returns (uint80,int256,uint256,uint256,uint80)"];
 const DEX = [
   "function quote(address,uint256,address) view returns (uint256)",
   "function swap(address,uint256,address,uint256,address) returns (uint256)",
@@ -88,7 +94,11 @@ const errorIface = new Interface([...ROUTER, ...ORACLE, ...VAULT_ERRORS].filter(
 let signer = null;
 let account = null;
 let slippageBps = DEFAULT_SLIPPAGE_BPS;
-const st = { unitBtc: 0n, unitEth: 0n, buyFee: 30n, sellFee: 30n, price: 0n, bal: { USDC: 0n, USDT: 0n, BIETIX: 0n }, eth: 0n };
+const st = {
+  unitBtc: 0n, unitEth: 0n, buyFee: 30n, sellFee: 30n, price: 0n, bal: { USDC: 0n, USDT: 0n, BIETIX: 0n }, eth: 0n,
+  // Por qué no se puede comprar o vender ahora (null = se puede). El canje In-Kind nunca se bloquea.
+  buyBlocked: null, sellBlocked: null,
+};
 
 const c = (addr, abi, runner = readProvider) => new Contract(addr, abi, runner);
 const $ = (id) => document.getElementById(id);
@@ -142,22 +152,71 @@ async function loadStats() {
 
   // Precios (si el oráculo falla, se avisa y se sigue mostrando lo demás)
   const banners = [];
+  let pricesOk = false, wrapperAlert = false;
   try {
     const price = await oracle.indexPriceUsd(unitBtc, unitEth);
     st.price = price;
+    pricesOk = true;
     $("price-usd").textContent = usd(price);
-    const btcUsd = await oracle.basketValueUsd(unitBtc, 0n);
-    const pctBtc = Number((btcUsd * 1000n) / price) / 10;
-    setMix(pctBtc);
+    // Desglose: cuánto del precio aporta el BTC y cuánto el ETH de cada token
+    const btcPart = await oracle.basketValueUsd(unitBtc, 0n);
+    const ethPart = price - btcPart;
+    setMix(Number((btcPart * 1000n) / price) / 10);
+    $("usd-btc").textContent = "· " + usd(btcPart);
+    $("usd-eth").textContent = "· " + usd(ethPart);
     $("tvl").textContent = usd((price * supply) / 10n ** 18n);
-    if (await oracle.wrapperAlert()) banners.push(["WBTC está cotizando por debajo de BTC. Estamos atentos.", false]);
+    wrapperAlert = await oracle.wrapperAlert();
+    if (wrapperAlert) banners.push(["WBTC está cotizando por debajo de BTC. Estamos atentos.", false]);
+    await showPriceSource(oracle);
   } catch (e) {
     banners.push([explain(e) || "Los precios de referencia no están disponibles ahora.", true]);
+    $("price-source").textContent = "";
   }
+
+  // Estado del protocolo: qué se puede hacer ahora y por qué no
+  const noPrices = "Precios no disponibles";
+  st.buyBlocked = paused || buyPaused || mintPaused ? "Compras pausadas" : !pricesOk ? noPrices : null;
+  st.sellBlocked = paused || sellPaused ? "Ventas pausadas" : !pricesOk ? noPrices : null;
+  renderStatus([
+    ["Compras", st.buyBlocked ? ["warn", st.buyBlocked === noPrices ? "Frenadas: sin precio válido" : "Pausadas"] : ["ok", "Disponibles"]],
+    ["Ventas", st.sellBlocked ? ["warn", st.sellBlocked === noPrices ? "Frenadas: sin precio válido" : "Pausadas"] : ["ok", "Disponibles"]],
+    ["Canje por BTC y ETH", ["ok", "Siempre disponible"]],
+    ["Precios de referencia", pricesOk ? ["ok", "Al día"] : ["warn", "No disponibles"]],
+    ["Paridad WBTC / BTC", !pricesOk ? ["wait", "—"] : wrapperAlert ? ["warn", "En alerta"] : ["ok", "Normal"]],
+  ]);
+  updateButtons();
+
   if (paused) banners.push(["Compras y ventas pausadas por seguridad. El canje por BTC y ETH sigue disponible.", true]);
   else if (buyPaused || mintPaused) banners.push(["Las compras están pausadas por seguridad. Vender y canjear siguen disponibles.", true]);
   else if (sellPaused) banners.push(["Las ventas por stablecoins están pausadas. El canje por BTC y ETH sigue disponible.", true]);
   showBanner(banners);
+}
+
+/** Precios de BTC y ETH que usa el oráculo, de dónde salen y hace cuánto se actualizaron. */
+async function showPriceSource(oracle) {
+  const [btc, eth, kBtc, kEth] = await Promise.all([oracle.wbtcUsd(), oracle.ethUsd(), oracle.BTC_USD(), oracle.ETH_USD()]);
+  const [cBtc, cEth] = await Promise.all([oracle.feedConfig(kBtc), oracle.feedConfig(kEth)]);
+  const [rBtc, rEth] = await Promise.all([c(cBtc.feed, FEED).latestRoundData(), c(cEth.feed, FEED).latestRoundData()]);
+  const oldest = Math.min(Number(rBtc[3]), Number(rEth[3]));
+  const mins = Math.max(0, Math.round((Date.now() / 1000 - oldest) / 60));
+  const ago = mins < 1 ? "hace menos de un minuto" : mins < 120 ? `hace ${mins} min` : `hace ${Math.round(mins / 60)} h`;
+  const usd0 = (v) => "$ " + nf(0, 0).format(Number(formatUnits(v, 18)));
+  const source = net.testnet ? "precios de prueba de esta red" : "Chainlink";
+  $("price-source").textContent = `1 WBTC = ${usd0(btc)} · 1 ETH = ${usd0(eth)} · Fuente: ${source}, actualizado ${ago}.`;
+}
+
+function renderStatus(rows) {
+  const ul = $("status-list");
+  ul.replaceChildren(...rows.map(([label, [state, text]]) => {
+    const li = document.createElement("li");
+    li.dataset.state = state;
+    const a = document.createElement("span");
+    a.textContent = label;
+    const b = document.createElement("b");
+    b.textContent = text;
+    li.append(a, b);
+    return li;
+  }));
 }
 
 function setMix(pctBtc) {
@@ -503,18 +562,38 @@ async function connect() {
   try {
     await window.ethereum.request({ method: "eth_requestAccounts" });
     await switchChain();
-    const provider = new BrowserProvider(window.ethereum);
-    signer = await provider.getSigner();
-    account = await signer.getAddress();
-    $("connect").textContent = account.slice(0, 6) + "…" + account.slice(-4);
-    $("faucet").hidden = !net.testnet;
+    await useWallet();
     status("");
-    await loadBalances();
   } catch (e) {
     console.error(e);
     status(explain(e) || "No se pudo conectar la billetera.", "error");
   }
   updateButtons();
+}
+
+async function useWallet() {
+  const provider = new BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+  account = await signer.getAddress();
+  $("connect").textContent = account.slice(0, 6) + "…" + account.slice(-4);
+  $("faucet").hidden = !net.testnet;
+  await loadBalances();
+}
+
+/** Si el usuario ya autorizó el sitio y está en la red correcta, se reconecta sin abrir ninguna ventana. */
+async function reconnectSilently() {
+  if (!window.ethereum) return;
+  try {
+    const [accounts, chain] = await Promise.all([
+      window.ethereum.request({ method: "eth_accounts" }),
+      window.ethereum.request({ method: "eth_chainId" }),
+    ]);
+    if (!accounts.length || Number(chain) !== chainId) return; // sin permiso o en otra red: espera al botón
+    await useWallet();
+    updateButtons();
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 async function switchChain() {
@@ -536,6 +615,8 @@ function updateButtons() {
   for (const [id, text] of Object.entries(label)) {
     const b = $(id);
     if (!account) { b.disabled = true; b.textContent = "Conectá tu billetera"; continue; }
+    const blocked = id === "buy-btn" ? st.buyBlocked : id === "sell-btn" ? st.sellBlocked : null;
+    if (blocked) { b.disabled = true; b.textContent = blocked; continue; }
     const input = { "buy-btn": "buy-amount", "sell-btn": "sell-amount", "exit-btn": "exit-amount" }[id];
     const isBuy = id === "buy-btn";
     const stable = $("buy-stable").value;
@@ -639,6 +720,7 @@ function init() {
     window.ethereum.on?.("chainChanged", () => location.reload());
   }
   updateButtons();
+  reconnectSilently();
   loadStats().catch((e) => { console.error(e); showBanner([["No se pudo leer el contrato. Revisá tu conexión.", true]]); });
   setInterval(() => loadStats().catch(() => {}), 30000);
 }

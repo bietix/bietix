@@ -38,11 +38,12 @@
           <span class="mix-eth" id="mix-eth"></span>
         </div>
         <figcaption class="mix-legend">
-          <span><i class="dot dot-btc"></i>Bitcoin <b id="pct-btc">50%</b></span>
-          <span><i class="dot dot-eth"></i>Ether <b id="pct-eth">50%</b></span>
+          <span><i class="dot dot-btc"></i>Bitcoin <b id="pct-btc">50%</b> <span class="mix-usd" id="usd-btc"></span></span>
+          <span><i class="dot dot-eth"></i>Ether <b id="pct-eth">50%</b> <span class="mix-usd" id="usd-eth"></span></span>
           <span class="mix-note">La proporción cambia sola con los precios: nadie rebalancea.</span>
         </figcaption>
       </figure>
+      <p class="price-source" id="price-source" aria-live="polite"></p>
     </section>
 
     <div class="grid">
@@ -157,6 +158,10 @@
           <div><dt>BIETIX en circulación</dt><dd id="supply">—</dd></div>
           <div><dt>Valor total respaldado</dt><dd id="tvl">—</dd></div>
         </dl>
+        <h3 class="status-title">Estado del protocolo</h3>
+        <ul class="status-list" id="status-list" aria-live="polite">
+          <li data-state="wait"><span>Compras</span><b>Leyendo…</b></li>
+        </ul>
         <a class="link" id="vault-link" target="_blank" rel="noopener">Ver el contrato en Arbiscan</a>
 
         <div class="faucet" id="faucet" hidden>

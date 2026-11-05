@@ -96,6 +96,23 @@ main { padding: 0 clamp(16px, 4vw, 56px); max-width: 1240px; margin: 0 auto; }
 }
 .mix-legend b { color: var(--ink); font-weight: 600; margin-left: 4px; }
 .mix-note { flex-basis: 100%; }
+.mix-usd { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.price-source { margin: 10px 0 0; font-size: var(--step--1); color: var(--ink-2); max-width: 760px; }
+
+/* ── Estado del protocolo ── */
+.status-title { font: 600 var(--step-0) var(--display); margin: 8px 0 8px; }
+.status-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 6px; }
+.status-list li {
+  display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+  padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--step--1);
+}
+.status-list li b { font-weight: 600; text-align: right; }
+.status-list li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; background: var(--ink-2); }
+.status-list li span { flex: 1; }
+.status-list li[data-state="ok"]::before { background: var(--ok); }
+.status-list li[data-state="ok"] b { color: var(--ok); }
+.status-list li[data-state="warn"]::before { background: var(--danger); }
+.status-list li[data-state="warn"] b { color: var(--danger); }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
 .dot-btc { background: var(--btc); }
 .dot-eth { background: var(--eth); }
