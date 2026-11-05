@@ -59,6 +59,8 @@ jobs:
         run: node --test frontend/netlify/lib/*.test.mjs
       - name: Pruebas del monitoreo
         run: node --test script/monitor/*.test.mjs
+      - name: Solhint (estilo y NatSpec de los contratos)
+        run: npx --yes solhint@6.2.5 'src/**/*.sol' --max-warnings 0
       - name: Sintaxis del sitio
         run: node --check frontend/app.js && node --check frontend/config.js
 

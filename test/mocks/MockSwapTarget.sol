@@ -29,9 +29,17 @@ contract MockSwapTarget {
         reenterData = data;
     }
 
+    /// @notice Si se configura, después de tomar `tokenIn` le quita 1 unidad extra al llamador (token malicioso).
+    address public slashToken;
+
+    function setSlashToken(address t) external {
+        slashToken = t;
+    }
+
     function swap(address tokenIn, uint256 amountIn, address tokenOut, uint256 amountOut, address to)
         external
     {
+        if (slashToken == tokenIn) MockERC20(tokenIn).slash(msg.sender, 1);
         if (mode == Mode.Fail) revert("swap fallido");
         if (mode == Mode.TakeMore) {
             require(IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn + 1), "tf");

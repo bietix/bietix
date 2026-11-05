@@ -197,7 +197,7 @@ abstract contract DeployBase is Script {
             "roles del oraculo"
         );
         _check(o.indexPriceUsd(v.UNIT_BTC(), v.UNIT_ETH()) > 0, "precio del indice");
-        for (uint256 i; i < p.stables.length; i++) {
+        for (uint256 i; i < p.stables.length; ++i) {
             _check(o.stableUsd(p.stables[i]) > 0, "precio de stable");
         }
 
@@ -215,10 +215,10 @@ abstract contract DeployBase is Script {
         );
         _check(address(r.VAULT()) == address(v) && address(r.oracle()) == address(o), "conexiones del router");
         _check(r.treasury() == p.treasury, "tesoreria del router");
-        for (uint256 i; i < p.stables.length; i++) {
+        for (uint256 i; i < p.stables.length; ++i) {
             _check(r.isStable(p.stables[i]), "stable habilitada");
         }
-        for (uint256 i; i < p.swapTargets.length; i++) {
+        for (uint256 i; i < p.swapTargets.length; ++i) {
             _check(r.isSwapTarget(p.swapTargets[i]), "agregador habilitado");
         }
     }
@@ -273,7 +273,7 @@ abstract contract DeployBase is Script {
 
     function _stableInits(Params memory p) internal pure returns (OracleGuard.StableInit[] memory s) {
         s = new OracleGuard.StableInit[](p.stables.length);
-        for (uint256 i; i < p.stables.length; i++) {
+        for (uint256 i; i < p.stables.length; ++i) {
             s[i] = OracleGuard.StableInit(
                 p.stables[i],
                 p.stableDecimals[i],
